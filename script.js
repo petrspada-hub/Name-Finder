@@ -2,6 +2,7 @@ let names = [];
 let white = new Set();
 let black = new Set();
 let filtered = [];
+let selectedName = null;
 
 const CZ_CHARS = new Set("aábcčdďeěéfghiíjklmnňoópqrřsštťuúůvwxyýzž");
 
@@ -18,9 +19,9 @@ fetch("jmena.csv")
   .then(r => r.text())
   .then(text => {
     names = text
-      .split("\n")
+      .split(/\r?\n/)
       .map(r => r.split(","))
-      .filter(r => r.length >= 2)
+      .filter(r => r.length >= 2 && r[0] && r[1])
       .map(r => [r[0].trim().toUpperCase(), r[1].trim()]);
 
     filter();
@@ -28,23 +29,26 @@ fetch("jmena.csv")
 
 // ---------------- FILTER ----------------
 function filter() {
-  const gender = val("gender");
-
   filtered = [];
 
   for (let [g, name] of names) {
     if (!name) continue;
 
-    let n = name;
+    let n = name.trim();
     let t = n.toLowerCase();
 
+    // list filter
     if (val("list_filter") === "Oblíbené" && !white.has(n)) continue;
     if (val("list_filter") === "Veto" && !black.has(n)) continue;
+
+    // gender
+    let gender = val("gender");
 
     if (gender === "Chlapecká" && !(g === "MUZ" || g === "NEUTRALNI")) continue;
     if (gender === "Dívčí" && !(g === "ZENA" || g === "NEUTRALNI")) continue;
     if (gender === "Neutrální" && g !== "NEUTRALNI") continue;
 
+    // diacritics
     if (checked("no_diacritics") && hasDiacritics(n)) continue;
 
     if (checked("cz_only")) {
@@ -53,6 +57,7 @@ function filter() {
       }
     }
 
+    // text filters
     if (val("start") && !t.startsWith(val("start").toLowerCase())) continue;
     if (val("not_end") && t.endsWith(val("not_end").toLowerCase())) continue;
     if (val("contains") && !t.includes(val("contains").toLowerCase())) continue;
@@ -60,19 +65,29 @@ function filter() {
 
     if (!checked("allow_double") && /(.)\1/.test(t)) continue;
 
+    // length filters (OPRAVENO)
+    let len = t.length;
+
+    if (val("exact_len")) {
+      if (len !== parseInt(val("exact_len"))) continue;
+    } else {
+      if (val("min_len") && len < parseInt(val("min_len"))) continue;
+      if (val("max_len") && len > parseInt(val("max_len"))) continue;
+    }
+
     let icon = g === "MUZ" ? "♂" : g === "ZENA" ? "♀" : "○";
-
     let full = buildFull(n, g);
-
     let mark = white.has(n) ? "⭐" : black.has(n) ? "❌" : "";
-
     let tag = g === "MUZ" ? "male" : g === "ZENA" ? "female" : "neutral";
 
-    filtered.push({ icon, n, full, mark, tag });
+    filtered.push({ icon, n, full, mark, tag, g });
   }
 
+  // správné české řazení
   filtered.sort((a, b) =>
-    removeDiacritics(a.n.toLowerCase()).localeCompare(removeDiacritics(b.n.toLowerCase()))
+    removeDiacritics(a.n)
+      .toLowerCase()
+      .localeCompare(removeDiacritics(b.n).toLowerCase(), "cs", { sensitivity: "base" })
   );
 
   render();
@@ -103,7 +118,7 @@ function render() {
 
   for (let x of filtered) {
     html += `
-      <tr class="${x.tag}">
+      <tr onclick="selectRow(this, '${x.n}')" class="${x.tag}">
         <td>${x.icon}</td>
         <td>${x.n}</td>
         <td>${x.full}</td>
@@ -113,6 +128,17 @@ function render() {
   }
 
   document.getElementById("table").innerHTML = html;
+}
+
+// ---------------- ROW SELECTION ----------------
+function selectRow(el, name) {
+  selectedName = name;
+
+  document.querySelectorAll("#table tr").forEach(r =>
+    r.classList.remove("selected")
+  );
+
+  el.classList.add("selected");
 }
 
 // ---------------- HELPERS ----------------
@@ -137,11 +163,17 @@ function randomPick() {
 }
 
 // ---------------- TOGGLES ----------------
+function getSelected() {
+  return selectedName;
+}
+
 function toggleWhite() {
   let name = getSelected();
   if (!name) return;
 
-  white.has(name) ? white.delete(name) : white.add(name);
+  if (white.has(name)) white.delete(name);
+  else white.add(name);
+
   black.delete(name);
   filter();
 }
@@ -150,12 +182,9 @@ function toggleBlack() {
   let name = getSelected();
   if (!name) return;
 
-  black.has(name) ? black.delete(name) : black.add(name);
+  if (black.has(name)) black.delete(name);
+  else black.add(name);
+
   white.delete(name);
   filter();
-}
-
-function getSelected() {
-  let sel = window.getSelection().toString();
-  return sel || null;
 }
