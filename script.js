@@ -110,7 +110,16 @@ function filter() {
     if (val("start") && !t.startsWith(val("start").toLowerCase())) continue;
     if (val("not_end") && t.endsWith(val("not_end").toLowerCase())) continue;
     if (val("contains") && !t.includes(val("contains").toLowerCase())) continue;
-    if (val("not_contains") && t.includes(val("not_contains").toLowerCase())) continue;
+
+    let nc = val("not_contains")
+      .toLowerCase()
+      .split(",")
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    if (nc.length) {
+      if (nc.some(part => t.includes(part))) continue;
+    }
 
     if (!checked("allow_double") && /(.)\1/.test(t)) continue;
 
