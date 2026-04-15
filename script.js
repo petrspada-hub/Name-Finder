@@ -108,7 +108,17 @@ function filter() {
 
     // text filters
     if (val("start") && !t.startsWith(val("start").toLowerCase())) continue;
-    if (val("not_end") && t.endsWith(val("not_end").toLowerCase())) continue;
+
+    let ne = val("not_end")
+      .toLowerCase()
+      .split(",")
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    if (ne.length) {
+      if (ne.some(part => t.endsWith(part))) continue;
+    }
+    
     if (val("contains") && !t.includes(val("contains").toLowerCase())) continue;
 
     let nc = val("not_contains")
