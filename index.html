@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <title>Jména</title>
+  <style>
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #ccc; padding: 4px; }
+    .male { color: #2b6fff; }
+    .female { color: #ff4fa3; }
+    .neutral { color: #777; }
+  </style>
+</head>
+<body>
+
+<h2 id="random"></h2>
+
+<div>
+  <select id="gender">
+    <option>Vše</option>
+    <option>Chlapecká</option>
+    <option>Dívčí</option>
+    <option>Neutrální</option>
+  </select>
+
+  <input id="start" placeholder="Začíná">
+  <input id="not_end" placeholder="Nekončí">
+  <input id="contains" placeholder="Obsahuje">
+  <input id="not_contains" placeholder="Neobsahuje">
+
+  <input id="min_len" placeholder="Min">
+  <input id="max_len" placeholder="Max">
+  <input id="exact_len" placeholder="Přesně">
+
+  <label><input type="checkbox" id="no_diacritics"> bez diakritiky</label>
+  <label><input type="checkbox" id="cz_only"> CZ znaky</label>
+  <label><input type="checkbox" id="allow_double" checked> zdvojená</label>
+
+  <button onclick="randomPick()">Náhodné</button>
+</div>
+
+<div>
+  <input id="sur_m" placeholder="Muž">
+  <input id="sur_f" placeholder="Žena">
+
+  <button onclick="toggleWhite()">⭐ Oblíbené</button>
+  <button onclick="toggleBlack()">❌ Veto</button>
+
+  <select id="list_filter">
+    <option>Vše</option>
+    <option>Oblíbené</option>
+    <option>Veto</option>
+  </select>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>Pohlaví</th>
+      <th>Jméno</th>
+      <th>Celé jméno</th>
+      <th>★</th>
+    </tr>
+  </thead>
+  <tbody id="table"></tbody>
+</table>
+
+<script src="script.js"></script>
+</body>
+</html>
