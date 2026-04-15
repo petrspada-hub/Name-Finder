@@ -1,8 +1,15 @@
-/* filtry nahoře */
-body > div:first-of-type,
-body > div:nth-of-type(2) {
+/* první řádek filtrů */
+body > div:first-of-type {
   position: sticky;
   top: 0;
+  background: white;
+  z-index: 20;
+}
+
+/* druhý řádek filtrů */
+body > div:nth-of-type(2) {
+  position: sticky;
+  top: 40px; /* výška prvního řádku */
   background: white;
   z-index: 20;
 }
@@ -10,7 +17,7 @@ body > div:nth-of-type(2) {
 /* hlavička tabulky */
 th {
   position: sticky;
-  top: 60px;
+  top: 80px; /* součet obou řádků */
   background: white;
 }
 
