@@ -4,8 +4,11 @@ let black = new Set();
 let filtered = [];
 let selectedName = null;
 
+const STORAGE_KEY = "jmena_app_state";
+
 const CZ_CHARS = new Set("aábcčdďeěéfghiíjklmnňoópqrřsštťuúůvwxyýzž");
 
+// ---------------- DIACRITICS ----------------
 function removeDiacritics(text) {
   return text.normalize("NFD").replace(/\p{Diacritic}/gu, "");
 }
@@ -14,7 +17,52 @@ function hasDiacritics(text) {
   return text !== removeDiacritics(text);
 }
 
-// ---------------- LOAD CSV ----------------
+// ---------------- LOAD STATE ----------------
+function loadState() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return;
+
+  try {
+    const data = JSON.parse(raw);
+
+    white = new Set(data.white || []);
+    black = new Set(data.black || []);
+
+    if (data.filters) {
+      for (let id in data.filters) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+
+        if (el.type === "checkbox") el.checked = data.filters[id];
+        else el.value = data.filters[id];
+      }
+    }
+  } catch (e) {
+    console.log("load error", e);
+  }
+}
+
+// ---------------- SAVE STATE ----------------
+function saveState() {
+  const filters = {};
+
+  document.querySelectorAll("input, select").forEach(el => {
+    if (!el.id) return;
+
+    filters[el.id] = el.type === "checkbox" ? el.checked : el.value;
+  });
+
+  localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({
+      white: [...white],
+      black: [...black],
+      filters
+    })
+  );
+}
+
+// ---------------- CSV ----------------
 fetch("jmena.csv")
   .then(r => r.text())
   .then(text => {
@@ -24,6 +72,7 @@ fetch("jmena.csv")
       .filter(r => r.length >= 2 && r[0] && r[1])
       .map(r => [r[0].trim().toUpperCase(), r[1].trim()]);
 
+    loadState();
     filter();
   });
 
@@ -34,7 +83,10 @@ function filter() {
   for (let [g, name] of names) {
     if (!name) continue;
 
-    let n = name.trim();
+    // capitalize (Python-like)
+    let n = name.trim().toLowerCase();
+    n = n.charAt(0).toUpperCase() + n.slice(1);
+
     let t = n.toLowerCase();
 
     // list filter
@@ -51,10 +103,9 @@ function filter() {
     // diacritics
     if (checked("no_diacritics") && hasDiacritics(n)) continue;
 
+    // CZ ONLY FIX
     if (checked("cz_only")) {
-      for (let c of n.toLowerCase()) {
-        if (!CZ_CHARS.has(c)) continue;
-      }
+      if ([...n.toLowerCase()].some(c => !CZ_CHARS.has(c))) continue;
     }
 
     // text filters
@@ -65,7 +116,7 @@ function filter() {
 
     if (!checked("allow_double") && /(.)\1/.test(t)) continue;
 
-    // length filters (OPRAVENO)
+    // length filters
     let len = t.length;
 
     if (val("exact_len")) {
@@ -80,10 +131,9 @@ function filter() {
     let mark = white.has(n) ? "⭐" : black.has(n) ? "❌" : "";
     let tag = g === "MUZ" ? "male" : g === "ZENA" ? "female" : "neutral";
 
-    filtered.push({ icon, n, full, mark, tag, g });
+    filtered.push({ icon, n, full, mark, tag });
   }
 
-  // správné české řazení
   filtered.sort((a, b) =>
     removeDiacritics(a.n)
       .toLowerCase()
@@ -91,6 +141,7 @@ function filter() {
   );
 
   render();
+  saveState();
 }
 
 // ---------------- FULL NAME ----------------
@@ -118,7 +169,7 @@ function render() {
 
   for (let x of filtered) {
     html += `
-      <tr onclick="selectRow(this, '${x.n}')" class="${x.tag}">
+      <tr data-name="${encodeURIComponent(x.n)}" class="${x.tag}">
         <td>${x.icon}</td>
         <td>${x.n}</td>
         <td>${x.full}</td>
@@ -127,10 +178,17 @@ function render() {
     `;
   }
 
-  document.getElementById("table").innerHTML = html;
+  const table = document.getElementById("table");
+  table.innerHTML = html;
+
+  table.querySelectorAll("tr").forEach(row => {
+    row.addEventListener("click", () => {
+      selectRow(row, decodeURIComponent(row.dataset.name));
+    });
+  });
 }
 
-// ---------------- ROW SELECTION ----------------
+// ---------------- ROW SELECT ----------------
 function selectRow(el, name) {
   selectedName = name;
 
