@@ -1,17 +1,20 @@
 let names = [];
+let filtered = [];
 let white = new Set();
 let black = new Set();
-let filtered = [];
 let selectedName = null;
 
 const CZ_CHARS = new Set("aábcčdďeěéfghiíjklmnňoópqrřsštťuúůvwxyýzž");
 
-function removeDiacritics(text) {
-  return text.normalize("NFD").replace(/\p{Diacritic}/gu, "");
+function removeDiacritics(t) {
+  return t.normalize("NFD").replace(/\p{Diacritic}/gu, "");
 }
-function hasDiacritics(text) {
-  return text !== removeDiacritics(text);
+function hasDiacritics(t) {
+  return t !== removeDiacritics(t);
 }
+
+const val = id => document.getElementById(id).value.trim();
+const checked = id => document.getElementById(id).checked;
 
 // ---------- LOAD CSV ----------
 fetch("jmena.csv")
@@ -22,50 +25,63 @@ fetch("jmena.csv")
       .map(r => r.split(","))
       .filter(r => r.length >= 2)
       .map(r => {
-        const name = r[0].trim().toLowerCase();
-        return [
-          name.charAt(0).toUpperCase() + name.slice(1),
-          r[1].trim()
-        ];
+        const raw = r[0].trim().toLowerCase();
+        const name = raw.charAt(0).toUpperCase() + raw.slice(1);
+        const gender = r[1].trim();
+        return [name, gender];
       });
+
     filter();
   });
 
 // ---------- FILTER ----------
 function filter() {
-  const gender = val("gender");
   filtered = [];
 
-  for (let [n, g] of names) {
-    if (!n) continue;
-    let t = n.toLowerCase();
-    let len = n.length;
+  const minLen = Number(val("min_len"));
+  const maxLen = Number(val("max_len"));
+  const exactLen = Number(val("exact_len"));
 
-    if (val("list_filter") === "Oblíbené" && !white.has(n)) continue;
-    if (val("list_filter") === "Veto" && !black.has(n)) continue;
+  for (const [n, g] of names) {
+    const t = n.toLowerCase();
+    const len = n.length;
 
-    if (gender === "Chlapecká" && !(g === "MUZ" || g === "NEUTRALNI")) continue;
-    if (gender === "Dívčí" && !(g === "ZENA" || g === "NEUTRALNI")) continue;
-    if (gender === "Neutrální" && g !== "NEUTRALNI") continue;
+    // --- délka ---
+    if (val("exact_len") && len !== exactLen) continue;
+    if (val("min_len") && len < minLen) continue;
+    if (val("max_len") && len > maxLen) continue;
 
-    if (checked("no_diacritics") && hasDiacritics(n)) continue;
-
-    if (checked("cz_only")) {
-      for (let c of t) {
-        if (!CZ_CHARS.has(c)) continue;
-      }
-    }
-
+    // --- text ---
     if (val("start") && !t.startsWith(val("start").toLowerCase())) continue;
     if (val("not_end") && t.endsWith(val("not_end").toLowerCase())) continue;
     if (val("contains") && !t.includes(val("contains").toLowerCase())) continue;
     if (val("not_contains") && t.includes(val("not_contains").toLowerCase())) continue;
 
-    if (val("exact_len") && len !== Number(val("exact_len"))) continue;
-    if (val("min_len") && len < Number(val("min_len"))) continue;
-    if (val("max_len") && len > Number(val("max_len"))) continue;
+    // --- znaky ---
+    if (checked("no_diacritics") && hasDiacritics(n)) continue;
+
+    if (checked("cz_only")) {
+      let ok = true;
+      for (const c of t) {
+        if (!CZ_CHARS.has(c)) {
+          ok = false;
+          break;
+        }
+      }
+      if (!ok) continue;
+    }
 
     if (!checked("allow_double") && /(.)\1/.test(t)) continue;
+
+    // --- seznamy ---
+    if (val("list_filter") === "Oblíbené" && !white.has(n)) continue;
+    if (val("list_filter") === "Veto" && !black.has(n)) continue;
+
+    // --- pohlaví ---
+    const genderSel = val("gender");
+    if (genderSel === "Chlapecká" && g !== "MUZ" && g !== "NEUTRALNI") continue;
+    if (genderSel === "Dívčí" && g !== "ZENA" && g !== "NEUTRALNI") continue;
+    if (genderSel === "Neutrální" && g !== "NEUTRALNI") continue;
 
     const icon = g === "MUZ" ? "♂" : g === "ZENA" ? "♀" : "○";
     const full = buildFull(n, g);
@@ -75,63 +91,48 @@ function filter() {
     filtered.push({ icon, n, full, mark, tag });
   }
 
-  filtered.sort((a, b) =>
-    removeDiacritics(a.n.toLowerCase())
-      .localeCompare(removeDiacritics(b.n.toLowerCase()))
-  );
-
   render();
 }
 
-// ---------- FULL NAME ----------
+// ---------- FULL ----------
 function buildFull(n, g) {
-  let m = val("sur_m");
-  let f = val("sur_f");
-
-  if (val("gender") === "Chlapecká") return m ? `${n} ${m}` : n;
-  if (val("gender") === "Dívčí") return f ? `${n} ${f}` : n;
+  const m = val("sur_m");
+  const f = val("sur_f");
 
   if (g === "MUZ") return m ? `${n} ${m}` : n;
   if (g === "ZENA") return f ? `${n} ${f}` : n;
 
   return (m || f)
-    ? `${m ? n + " " + m : n} / ${f ? n + " " + f : n}`
+    ? `${m ? n + " " + m : n}${m && f ? " / " : ""}${f ? n + " " + f : ""}`
     : n;
 }
 
 // ---------- RENDER ----------
 function render() {
-  let html = "";
-  for (let x of filtered) {
-    html += `
+  document.getElementById("table").innerHTML = filtered.map(x => `
 <tr class="${x.tag} ${x.n === selectedName ? "selected" : ""}"
     onclick="selectRow('${x.n}')">
   <td>${x.icon}</td>
   <td>${x.n}</td>
   <td>${x.full}</td>
   <td>${x.mark}</td>
-</tr>`;
-  }
-  document.getElementById("table").innerHTML = html;
+</tr>`).join("");
 }
 
-// ---------- HELPERS ----------
-function val(id) { return document.getElementById(id).value; }
-function checked(id) { return document.getElementById(id).checked; }
-
+// ---------- EVENTS ----------
 document.querySelectorAll("input, select")
   .forEach(el => el.addEventListener("input", filter));
 
 // ---------- RANDOM ----------
 function randomPick() {
   if (!filtered.length) return;
-  let x = filtered[Math.floor(Math.random() * filtered.length)];
+  const x = filtered[Math.floor(Math.random() * filtered.length)];
   document.getElementById("random").innerText = x.n;
 }
 
 // ---------- SELECTION ----------
-function selectRow(name) {
-  selectedName = name;
+function selectRow(n) {
+  selectedName = n;
   render();
 }
 
