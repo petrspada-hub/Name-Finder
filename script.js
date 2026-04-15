@@ -8,16 +8,24 @@ const STORAGE_KEY = "jmena_app_state";
 
 const CZ_CHARS = new Set("aábcčdďeěéfghiíjklmnňoópqrřsštťuúůvwxyýzž");
 
-// ---------------- DIACRITICS ----------------
-function removeDiacritics(text) {
-  return text.normalize("NFD").replace(/\p{Diacritic}/gu, "");
-}
+document.addEventListener("DOMContentLoaded", () => {
+  loadState();
+  bindEvents();
 
-function hasDiacritics(text) {
-  return text !== removeDiacritics(text);
-}
+  fetch("jmena.csv")
+    .then(r => r.text())
+    .then(text => {
+      names = text
+        .split(/\r?\n/)
+        .map(r => r.split(","))
+        .filter(r => r.length >= 2 && r[0] && r[1])
+        .map(r => [r[0].trim().toUpperCase(), r[1].trim()]);
 
-// ---------------- LOAD STATE ----------------
+      filter();
+    });
+});
+
+// ---------------- STATE ----------------
 function loadState() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return;
@@ -37,44 +45,23 @@ function loadState() {
         else el.value = data.filters[id];
       }
     }
-  } catch (e) {
-    console.log("load error", e);
-  }
+  } catch {}
 }
 
-// ---------------- SAVE STATE ----------------
 function saveState() {
   const filters = {};
 
   document.querySelectorAll("input, select").forEach(el => {
     if (!el.id) return;
-
     filters[el.id] = el.type === "checkbox" ? el.checked : el.value;
   });
 
-  localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify({
-      white: [...white],
-      black: [...black],
-      filters
-    })
-  );
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({
+    white: [...white],
+    black: [...black],
+    filters
+  }));
 }
-
-// ---------------- CSV ----------------
-fetch("jmena.csv")
-  .then(r => r.text())
-  .then(text => {
-    names = text
-      .split(/\r?\n/)
-      .map(r => r.split(","))
-      .filter(r => r.length >= 2 && r[0] && r[1])
-      .map(r => [r[0].trim().toUpperCase(), r[1].trim()]);
-
-    loadState();
-    filter();
-  });
 
 // ---------------- FILTER ----------------
 function filter() {
@@ -83,32 +70,26 @@ function filter() {
   for (let [g, name] of names) {
     if (!name) continue;
 
-    // capitalize (Python-like)
     let n = name.trim().toLowerCase();
     n = n.charAt(0).toUpperCase() + n.slice(1);
 
     let t = n.toLowerCase();
 
-    // list filter
     if (val("list_filter") === "Oblíbené" && !white.has(n)) continue;
     if (val("list_filter") === "Veto" && !black.has(n)) continue;
 
-    // gender
     let gender = val("gender");
 
     if (gender === "Chlapecká" && !(g === "MUZ" || g === "NEUTRALNI")) continue;
     if (gender === "Dívčí" && !(g === "ZENA" || g === "NEUTRALNI")) continue;
     if (gender === "Neutrální" && g !== "NEUTRALNI") continue;
 
-    // diacritics
     if (checked("no_diacritics") && hasDiacritics(n)) continue;
 
-    // CZ ONLY FIX
     if (checked("cz_only")) {
       if ([...n.toLowerCase()].some(c => !CZ_CHARS.has(c))) continue;
     }
 
-    // text filters
     if (val("start") && !t.startsWith(val("start").toLowerCase())) continue;
     if (val("not_end") && t.endsWith(val("not_end").toLowerCase())) continue;
     if (val("contains") && !t.includes(val("contains").toLowerCase())) continue;
@@ -116,7 +97,6 @@ function filter() {
 
     if (!checked("allow_double") && /(.)\1/.test(t)) continue;
 
-    // length filters
     let len = t.length;
 
     if (val("exact_len")) {
@@ -127,7 +107,7 @@ function filter() {
     }
 
     let icon = g === "MUZ" ? "♂" : g === "ZENA" ? "♀" : "○";
-    let full = buildFull(n, g);
+    let full = n;
     let mark = white.has(n) ? "⭐" : black.has(n) ? "❌" : "";
     let tag = g === "MUZ" ? "male" : g === "ZENA" ? "female" : "neutral";
 
@@ -135,68 +115,47 @@ function filter() {
   }
 
   filtered.sort((a, b) =>
-    removeDiacritics(a.n)
-      .toLowerCase()
-      .localeCompare(removeDiacritics(b.n).toLowerCase(), "cs", { sensitivity: "base" })
+    a.n.localeCompare(b.n, "cs", { sensitivity: "base" })
   );
 
   render();
   saveState();
 }
 
-// ---------------- FULL NAME ----------------
-function buildFull(n, g) {
-  let m = val("sur_m");
-  let f = val("sur_f");
-
-  if (val("gender") === "Chlapecká") return m ? `${n} ${m}` : n;
-  if (val("gender") === "Dívčí") return f ? `${n} ${f}` : n;
-
-  if (val("gender") === "Neutrální")
-    return (m || f) ? `${n} ${m} / ${n} ${f}` : n;
-
-  if (g === "MUZ") return m ? `${n} ${m}` : n;
-  if (g === "ZENA") return f ? `${n} ${f}` : n;
-
-  return (m || f)
-    ? [m ? `${n} ${m}` : n, f ? `${n} ${f}` : n].join(" / ")
-    : n;
-}
-
 // ---------------- RENDER ----------------
 function render() {
-  let html = "";
-
-  for (let x of filtered) {
-    html += `
-      <tr data-name="${encodeURIComponent(x.n)}" class="${x.tag}">
-        <td>${x.icon}</td>
-        <td>${x.n}</td>
-        <td>${x.full}</td>
-        <td>${x.mark}</td>
-      </tr>
-    `;
-  }
-
   const table = document.getElementById("table");
-  table.innerHTML = html;
+  table.innerHTML = "";
 
-  table.querySelectorAll("tr").forEach(row => {
-    row.addEventListener("click", () => {
-      selectRow(row, decodeURIComponent(row.dataset.name));
+  filtered.forEach(x => {
+    const tr = document.createElement("tr");
+
+    tr.className = x.tag;
+    tr.innerHTML = `
+      <td>${x.icon}</td>
+      <td>${x.n}</td>
+      <td>${x.full}</td>
+      <td>${x.mark}</td>
+    `;
+
+    tr.addEventListener("click", () => {
+      selectedName = x.n;
+
+      document.querySelectorAll("tr").forEach(r =>
+        r.classList.remove("selected")
+      );
+      tr.classList.add("selected");
     });
+
+    table.appendChild(tr);
   });
 }
 
-// ---------------- ROW SELECT ----------------
-function selectRow(el, name) {
-  selectedName = name;
-
-  document.querySelectorAll("#table tr").forEach(r =>
-    r.classList.remove("selected")
-  );
-
-  el.classList.add("selected");
+// ---------------- EVENTS ----------------
+function bindEvents() {
+  document.querySelectorAll("input, select").forEach(el => {
+    el.addEventListener("input", filter);
+  });
 }
 
 // ---------------- HELPERS ----------------
@@ -208,41 +167,41 @@ function checked(id) {
   return document.getElementById(id).checked;
 }
 
-// ---------------- EVENTS ----------------
-document.querySelectorAll("input, select").forEach(el => {
-  el.addEventListener("input", filter);
-});
-
 // ---------------- RANDOM ----------------
 function randomPick() {
   if (!filtered.length) return;
-  let x = filtered[Math.floor(Math.random() * filtered.length)];
-  document.getElementById("random").innerText = x.n;
+  document.getElementById("random").innerText =
+    filtered[Math.floor(Math.random() * filtered.length)].n;
 }
 
 // ---------------- TOGGLES ----------------
-function getSelected() {
-  return selectedName;
-}
-
 function toggleWhite() {
-  let name = getSelected();
-  if (!name) return;
+  if (!selectedName) return;
 
-  if (white.has(name)) white.delete(name);
-  else white.add(name);
+  white.has(selectedName)
+    ? white.delete(selectedName)
+    : white.add(selectedName);
 
-  black.delete(name);
+  black.delete(selectedName);
   filter();
 }
 
 function toggleBlack() {
-  let name = getSelected();
-  if (!name) return;
+  if (!selectedName) return;
 
-  if (black.has(name)) black.delete(name);
-  else black.add(name);
+  black.has(selectedName)
+    ? black.delete(selectedName)
+    : black.add(selectedName);
 
-  white.delete(name);
+  white.delete(selectedName);
   filter();
+}
+
+// ---------------- DIACRITICS ----------------
+function removeDiacritics(text) {
+  return text.normalize("NFD").replace(/\p{Diacritic}/gu, "");
+}
+
+function hasDiacritics(text) {
+  return text !== removeDiacritics(text);
 }
