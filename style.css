@@ -1,4 +1,7 @@
 .selected {
-  background: #444;
-  color: white;
+  background: #d9d9d9;
+}
+
+.selected td {
+  background: #d9d9d9;
 }
