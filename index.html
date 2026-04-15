@@ -1,19 +1,37 @@
 <!DOCTYPE html>
 <html lang="cs">
 <head>
-  <meta charset="UTF-8">
-  <title>Jména</title>
-  <style>
-    table { width: 100%; border-collapse: collapse; }
-    th, td { border: 1px solid #ccc; padding: 4px; }
-    .male { color: #2b6fff; }
-    .female { color: #ff4fa3; }
-    .neutral { color: #777; }
-  </style>
-</head>
-<body>
+<meta charset="UTF-8">
+<title>Jména</title>
+<style>
+table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
 
-<h2 id="random"></h2>
+th, td {
+  border: 1px solid #ccc;
+  padding: 4px;
+}
+
+th:nth-child(1), td:nth-child(1) { width: 60px; text-align: center; }
+th:nth-child(2), td:nth-child(2) { width: 150px; }
+th:nth-child(3), td:nth-child(3) { width: auto; }
+th:nth-child(4), td:nth-child(4) { width: 60px; text-align: center; }
+
+.male { color: #2b6fff; }
+.female { color: #ff4fa3; }
+.neutral { color: #777; }
+
+tr.selected {
+  background: #ffeeba;
+  cursor: pointer;
+}
+</style>
+</head>
+
+<body>
 
 <div>
   <select id="gender">
@@ -37,7 +55,10 @@
   <label><input type="checkbox" id="allow_double" checked> Zdvojené znaky</label>
 
   <button onclick="randomPick()">Náhodné</button>
+  <span id="random" style="margin-left:10px;font-weight:bold"></span>
 </div>
+
+<hr>
 
 <div>
   <input id="sur_m" placeholder="Chlapecké příjmení">
@@ -54,15 +75,15 @@
 </div>
 
 <table>
-  <thead>
-    <tr>
-      <th>Pohlaví</th>
-      <th>Jméno</th>
-      <th>Celé jméno</th>
-      <th>★</th>
-    </tr>
-  </thead>
-  <tbody id="table"></tbody>
+<thead>
+<tr>
+  <th>Pohlaví</th>
+  <th>Jméno</th>
+  <th>Celé jméno</th>
+  <th>★</th>
+</tr>
+</thead>
+<tbody id="table"></tbody>
 </table>
 
 <script src="script.js"></script>
