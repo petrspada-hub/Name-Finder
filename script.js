@@ -5,9 +5,18 @@ let filtered = [];
 let selectedName = null;
 
 const STORAGE_KEY = "jmena_app_state";
-
 const CZ_CHARS = new Set("aábcčdďeěéfghiíjklmnňoópqrřsštťuúůvwxyýzž");
 
+// ---------------- DIACRITICS ----------------
+function removeDiacritics(text) {
+  return text.normalize("NFD").replace(/\p{Diacritic}/gu, "");
+}
+
+function hasDiacritics(text) {
+  return text !== removeDiacritics(text);
+}
+
+// ---------------- INIT ----------------
 document.addEventListener("DOMContentLoaded", () => {
   loadState();
   bindEvents();
@@ -56,11 +65,14 @@ function saveState() {
     filters[el.id] = el.type === "checkbox" ? el.checked : el.value;
   });
 
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({
-    white: [...white],
-    black: [...black],
-    filters
-  }));
+  localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({
+      white: [...white],
+      black: [...black],
+      filters
+    })
+  );
 }
 
 // ---------------- FILTER ----------------
@@ -75,21 +87,26 @@ function filter() {
 
     let t = n.toLowerCase();
 
+    // list filter
     if (val("list_filter") === "Oblíbené" && !white.has(n)) continue;
     if (val("list_filter") === "Veto" && !black.has(n)) continue;
 
+    // gender
     let gender = val("gender");
 
     if (gender === "Chlapecká" && !(g === "MUZ" || g === "NEUTRALNI")) continue;
     if (gender === "Dívčí" && !(g === "ZENA" || g === "NEUTRALNI")) continue;
     if (gender === "Neutrální" && g !== "NEUTRALNI") continue;
 
+    // diacritics
     if (checked("no_diacritics") && hasDiacritics(n)) continue;
 
+    // CZ ONLY FIX
     if (checked("cz_only")) {
       if ([...n.toLowerCase()].some(c => !CZ_CHARS.has(c))) continue;
     }
 
+    // text filters
     if (val("start") && !t.startsWith(val("start").toLowerCase())) continue;
     if (val("not_end") && t.endsWith(val("not_end").toLowerCase())) continue;
     if (val("contains") && !t.includes(val("contains").toLowerCase())) continue;
@@ -97,6 +114,7 @@ function filter() {
 
     if (!checked("allow_double") && /(.)\1/.test(t)) continue;
 
+    // length filters
     let len = t.length;
 
     if (val("exact_len")) {
@@ -107,7 +125,7 @@ function filter() {
     }
 
     let icon = g === "MUZ" ? "♂" : g === "ZENA" ? "♀" : "○";
-    let full = n;
+    let full = buildFull(n, g);
     let mark = white.has(n) ? "⭐" : black.has(n) ? "❌" : "";
     let tag = g === "MUZ" ? "male" : g === "ZENA" ? "female" : "neutral";
 
@@ -120,6 +138,26 @@ function filter() {
 
   render();
   saveState();
+}
+
+// ---------------- FULL NAME ----------------
+function buildFull(n, g) {
+  let m = document.getElementById("sur_m").value;
+  let f = document.getElementById("sur_f").value;
+  let gender = document.getElementById("gender").value;
+
+  if (gender === "Chlapecká") return m ? `${n} ${m}` : n;
+  if (gender === "Dívčí") return f ? `${n} ${f}` : n;
+
+  if (gender === "Neutrální")
+    return (m || f) ? `${n} ${m} / ${n} ${f}` : n;
+
+  if (g === "MUZ") return m ? `${n} ${m}` : n;
+  if (g === "ZENA") return f ? `${n} ${f}` : n;
+
+  return (m || f)
+    ? [m ? `${n} ${m}` : n, f ? `${n} ${f}` : n].join(" / ")
+    : n;
 }
 
 // ---------------- RENDER ----------------
@@ -144,6 +182,7 @@ function render() {
       document.querySelectorAll("tr").forEach(r =>
         r.classList.remove("selected")
       );
+
       tr.classList.add("selected");
     });
 
@@ -175,12 +214,15 @@ function randomPick() {
 }
 
 // ---------------- TOGGLES ----------------
+function getSelected() {
+  return selectedName;
+}
+
 function toggleWhite() {
   if (!selectedName) return;
 
-  white.has(selectedName)
-    ? white.delete(selectedName)
-    : white.add(selectedName);
+  if (white.has(selectedName)) white.delete(selectedName);
+  else white.add(selectedName);
 
   black.delete(selectedName);
   filter();
@@ -189,19 +231,9 @@ function toggleWhite() {
 function toggleBlack() {
   if (!selectedName) return;
 
-  black.has(selectedName)
-    ? black.delete(selectedName)
-    : black.add(selectedName);
+  if (black.has(selectedName)) black.delete(selectedName);
+  else black.add(selectedName);
 
   white.delete(selectedName);
   filter();
-}
-
-// ---------------- DIACRITICS ----------------
-function removeDiacritics(text) {
-  return text.normalize("NFD").replace(/\p{Diacritic}/gu, "");
-}
-
-function hasDiacritics(text) {
-  return text !== removeDiacritics(text);
 }
