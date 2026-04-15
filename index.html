@@ -3,10 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <title>Jména</title>
+
   <link rel="stylesheet" href="style.css">
+
   <style>
     table { width: 100%; border-collapse: collapse; }
     th, td { border: 1px solid #ccc; padding: 4px; }
+
     .male { color: #2b6fff; }
     .female { color: #ff4fa3; }
     .neutral { color: #777; }
@@ -16,42 +19,47 @@
 
 <h2 id="random"></h2>
 
-<div>
-  <select id="gender">
-    <option>Vše</option>
-    <option>Chlapecká</option>
-    <option>Dívčí</option>
-    <option>Neutrální</option>
-  </select>
+<!-- ✔ JEDEN WRAPPER PRO VŠECHNY FILTRY -->
+<div class="topbar">
 
-  <input id="start" placeholder="Začíná na">
-  <input id="not_end" placeholder="Nekončí na">
-  <input id="contains" placeholder="Obsahuje">
-  <input id="not_contains" placeholder="Neobsahuje">
+  <div>
+    <select id="gender">
+      <option>Vše</option>
+      <option>Chlapecká</option>
+      <option>Dívčí</option>
+      <option>Neutrální</option>
+    </select>
 
-  <input id="min_len" placeholder="Min. počet písmen">
-  <input id="max_len" placeholder="Max. počet písmen">
-  <input id="exact_len" placeholder="Přesný počet písmen">
+    <input id="start" placeholder="Začíná na">
+    <input id="not_end" placeholder="Nekončí na">
+    <input id="contains" placeholder="Obsahuje">
+    <input id="not_contains" placeholder="Neobsahuje">
 
-  <label><input type="checkbox" id="no_diacritics"> Bez diakritiky</label>
-  <label><input type="checkbox" id="cz_only"> CZ znaky</label>
-  <label><input type="checkbox" id="allow_double" checked> Zdvojené znaky</label>
+    <input id="min_len" placeholder="Min. počet písmen">
+    <input id="max_len" placeholder="Max. počet písmen">
+    <input id="exact_len" placeholder="Přesný počet písmen">
 
-  <button onclick="randomPick()">Náhodné</button>
-</div>
+    <label><input type="checkbox" id="no_diacritics"> Bez diakritiky</label>
+    <label><input type="checkbox" id="cz_only"> CZ znaky</label>
+    <label><input type="checkbox" id="allow_double" checked> Zdvojené znaky</label>
 
-<div>
-  <input id="sur_m" placeholder="Chlapecké příjmení">
-  <input id="sur_f" placeholder="Dívčí příjmení">
+    <button onclick="randomPick()">Náhodné</button>
+  </div>
 
-  <button onclick="toggleWhite()">⭐ Oblíbené</button>
-  <button onclick="toggleBlack()">❌ Veto</button>
+  <div>
+    <input id="sur_m" placeholder="Chlapecké příjmení">
+    <input id="sur_f" placeholder="Dívčí příjmení">
 
-  <select id="list_filter">
-    <option>Vše</option>
-    <option>Oblíbené</option>
-    <option>Veto</option>
-  </select>
+    <button onclick="toggleWhite()">⭐ Oblíbené</button>
+    <button onclick="toggleBlack()">❌ Veto</button>
+
+    <select id="list_filter">
+      <option>Vše</option>
+      <option>Oblíbené</option>
+      <option>Veto</option>
+    </select>
+  </div>
+
 </div>
 
 <table>
@@ -67,5 +75,6 @@
 </table>
 
 <script src="script.js"></script>
+
 </body>
 </html>
