@@ -204,42 +204,71 @@ function renderPagination() {
     p.id = "pagination";
     p.style.margin = "10px 0";
     p.style.display = "flex";
-    p.style.gap = "10px";
+    p.style.gap = "12px";
     p.style.alignItems = "center";
     document.body.appendChild(p);
   }
 
   const pages = Math.max(1, Math.ceil(filtered.length / ROWS_PER_PAGE));
+  if (currentPage > pages) currentPage = pages;
 
   p.innerHTML = `
-    <button onclick="prevPage()" ${currentPage === 1 ? "disabled" : ""}>←</button>
+    <button id="prev" ${currentPage === 1 ? "disabled" : ""}>←</button>
 
     <span>
       Strana
-      <input
-        id="page_input"
-        type="number"
-        min="1"
-        max="${pages}"
-        value="${currentPage}"
-        style="width:60px"
-      >
+      <input id="page_input" type="number" min="1" max="${pages}"
+             value="${currentPage}" style="width:60px">
       / ${pages}
     </span>
 
-    <button onclick="nextPage()" ${currentPage === pages ? "disabled" : ""}>→</button>
+    <button id="next" ${currentPage === pages ? "disabled" : ""}>→</button>
 
     <span style="margin-left:20px">
       Řádků:
-      <select id="rows_per_page">
-        <option value="10">10</option>
-        <option value="20">20</option>
-        <option value="30">30</option>
-        <option value="50">50</option>
-        <option value="100">100</option>
-      </select>
+      <input id="rows_input" type="number" min="1" value="${ROWS_PER_PAGE}"
+             style="width:70px">
     </span>
   `;
+
+  // šipky
+  document.getElementById("prev").onclick = () => {
+    if (currentPage > 1) {
+      currentPage--;
+      render();
+    }
+  };
+
+  document.getElementById("next").onclick = () => {
+    if (currentPage < pages) {
+      currentPage++;
+      render();
+    }
+  };
+
+  // ruční zadání stránky
+  const pageInput = document.getElementById("page_input");
+  pageInput.onchange = () => {
+    let v = parseInt(pageInput.value);
+    if (isNaN(v)) return;
+    currentPage = Math.min(Math.max(1, v), pages);
+    render();
+  };
+
+  // ruční zadání počtu řádků
+  const rowsInput = document.getElementById("rows_input");
+  rowsInput.onchange = () => {
+    let v = parseInt(rowsInput.value);
+    if (isNaN(v) || v < 1) return;
+
+    const oldPages = pages;
+    ROWS_PER_PAGE = v;
+    const newPages = Math.ceil(filtered.length / ROWS_PER_PAGE);
+
+    if (oldPages !== newPages) currentPage = 1;
+    render();
+  };
+}
 
   // nastavení selectu
   const rpp = document.getElementById("rows_per_page");
