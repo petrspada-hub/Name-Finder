@@ -85,8 +85,10 @@ function filter() {
     if (val("list_filter") === "Veto" && !black.has(n)) continue;
 
     let gender = val("gender");
-    if (gender === "Chlapecká" && !(g === "MUZ" || g === "NEUTRALNI")) continue;
-    if (gender === "Dívčí" && !(g === "ZENA" || g === "NEUTRALNI")) continue;
+    if (gender === "Chlapecká" && g !== "MUZ") continue;
+    if (gender === "Dívčí" && g !== "ZENA") continue;
+    if (gender === "Chlapecká + N" && !(g === "MUZ" || g === "NEUTRALNI")) continue;
+    if (gender === "Dívčí + N" && !(g === "ZENA" || g === "NEUTRALNI")) continue;
     if (gender === "Neutrální" && g !== "NEUTRALNI") continue;
 
     if (checked("no_diacritics") && hasDiacritics(n)) continue;
