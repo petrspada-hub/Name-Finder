@@ -9,7 +9,7 @@ const CZ_CHARS = new Set("aábcčdďeěéfghiíjklmnňoópqrřsštťuúůvwxyýz
 
 // ===== PAGINATION =====
 let currentPage = 1;
-const ROWS_PER_PAGE = 30;
+let ROWS_PER_PAGE = 30;
 let lastResultCount = null;
 
 // ---------------- DIACRITICS ----------------
@@ -203,30 +203,67 @@ function renderPagination() {
     p = document.createElement("div");
     p.id = "pagination";
     p.style.margin = "10px 0";
+    p.style.display = "flex";
+    p.style.gap = "10px";
+    p.style.alignItems = "center";
     document.body.appendChild(p);
   }
 
-  const pages = Math.ceil(filtered.length / ROWS_PER_PAGE);
+  const pages = Math.max(1, Math.ceil(filtered.length / ROWS_PER_PAGE));
+
   p.innerHTML = `
-    <button ${currentPage === 1 ? "disabled" : ""} onclick="prevPage()">←</button>
-    Strana ${currentPage} / ${pages}
-    <button ${currentPage === pages ? "disabled" : ""} onclick="nextPage()">→</button>
+    <button onclick="prevPage()" ${currentPage === 1 ? "disabled" : ""}>←</button>
+
+    <span>
+      Strana
+      <input
+        id="page_input"
+        type="number"
+        min="1"
+        max="${pages}"
+        value="${currentPage}"
+        style="width:60px"
+      >
+      / ${pages}
+    </span>
+
+    <button onclick="nextPage()" ${currentPage === pages ? "disabled" : ""}>→</button>
+
+    <span style="margin-left:20px">
+      Řádků:
+      <select id="rows_per_page">
+        <option value="10">10</option>
+        <option value="20">20</option>
+        <option value="30">30</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+      </select>
+    </span>
   `;
-}
 
-function prevPage() {
-  if (currentPage > 1) {
-    currentPage--;
-    render();
-  }
-}
+  // nastavení selectu
+  const rpp = document.getElementById("rows_per_page");
+  rpp.value = ROWS_PER_PAGE;
 
-function nextPage() {
-  const pages = Math.ceil(filtered.length / ROWS_PER_PAGE);
-  if (currentPage < pages) {
-    currentPage++;
+  rpp.onchange = () => {
+    const oldPages = Math.ceil(filtered.length / ROWS_PER_PAGE);
+    ROWS_PER_PAGE = parseInt(rpp.value);
+    const newPages = Math.ceil(filtered.length / ROWS_PER_PAGE);
+
+    if (oldPages !== newPages) currentPage = 1;
     render();
-  }
+  };
+
+  // ruční zadání stránky
+  const input = document.getElementById("page_input");
+  input.onchange = () => {
+    let v = parseInt(input.value);
+    if (isNaN(v)) return;
+    if (v < 1) v = 1;
+    if (v > pages) v = pages;
+    currentPage = v;
+    render();
+  };
 }
 
 // ---------------- EVENTS ----------------
