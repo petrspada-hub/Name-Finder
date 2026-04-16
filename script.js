@@ -10,6 +10,7 @@ const CZ_CHARS = new Set("aábcčdďeěéfghiíjklmnňoópqrřsštťuúůvwxyýz
 // ===== PAGINATION =====
 let currentPage = 1;
 const ROWS_PER_PAGE = 30;
+let lastResultCount = null;
 
 // ---------------- DIACRITICS ----------------
 function removeDiacritics(text) {
@@ -53,6 +54,7 @@ function loadState() {
     }
   } catch {}
 }
+
 function saveState() {
   const filters = {};
   document.querySelectorAll("input, select").forEach(el => {
@@ -71,9 +73,9 @@ function saveState() {
 
 // ---------------- FILTER ----------------
 function filter() {
-  currentPage = 1; // RESET PAGE
-
+  const oldCount = lastResultCount;
   filtered = [];
+
   for (let [g, name] of names) {
     if (!name) continue;
 
@@ -81,22 +83,26 @@ function filter() {
     n = n.charAt(0).toUpperCase() + n.slice(1);
     let t = n.toLowerCase();
 
+    // list filter
     if (val("list_filter") === "Oblíbené" && !white.has(n)) continue;
     if (val("list_filter") === "Veto" && !black.has(n)) continue;
 
+    // gender
     let gender = val("gender");
-    if (gender === "Chlapecká" && g !== "MUZ") continue;
-    if (gender === "Dívčí" && g !== "ZENA") continue;
     if (gender === "Chlapecká + N" && !(g === "MUZ" || g === "NEUTRALNI")) continue;
     if (gender === "Dívčí + N" && !(g === "ZENA" || g === "NEUTRALNI")) continue;
+    if (gender === "Pouze chlapecká" && g !== "MUZ") continue;
+    if (gender === "Pouze dívčí" && g !== "ZENA") continue;
     if (gender === "Neutrální" && g !== "NEUTRALNI") continue;
 
+    // diacritics
     if (checked("no_diacritics") && hasDiacritics(n)) continue;
 
     if (checked("cz_only")) {
       if ([...n.toLowerCase()].some(c => !CZ_CHARS.has(c))) continue;
     }
 
+    // text filters
     if (val("start") && !t.startsWith(val("start").toLowerCase())) continue;
 
     let ne = val("not_end").toLowerCase().split(",").map(s => s.trim()).filter(Boolean);
@@ -109,6 +115,7 @@ function filter() {
 
     if (!checked("allow_double") && /(.)\1/.test(t)) continue;
 
+    // length filters
     let len = t.length;
     if (val("exact_len")) {
       if (len !== parseInt(val("exact_len"))) continue;
@@ -129,6 +136,11 @@ function filter() {
     a.n.localeCompare(b.n, "cs", { sensitivity: "base" })
   );
 
+  if (oldCount !== null && oldCount !== filtered.length) {
+    currentPage = 1;
+  }
+  lastResultCount = filtered.length;
+
   render();
   saveState();
 }
@@ -139,10 +151,15 @@ function buildFull(n, g) {
   let f = document.getElementById("sur_f").value;
   let gender = document.getElementById("gender").value;
 
-  if (gender === "Chlapecká") return m ? `${n} ${m}` : n;
-  if (gender === "Dívčí") return f ? `${n} ${f}` : n;
+  if (gender === "Chlapecká + N") return g === "ZENA" ? n : (m ? `${n} ${m}` : n);
+  if (gender === "Dívčí + N") return g === "MUZ" ? n : (f ? `${n} ${f}` : n);
+
+  if (gender === "Pouze chlapecká") return m ? `${n} ${m}` : n;
+  if (gender === "Pouze dívčí") return f ? `${n} ${f}` : n;
+
   if (gender === "Neutrální")
     return (m || f) ? `${n} ${m} / ${n} ${f}` : n;
+
   if (g === "MUZ") return m ? `${n} ${m}` : n;
   if (g === "ZENA") return f ? `${n} ${f}` : n;
 
@@ -158,9 +175,8 @@ function render() {
 
   const start = (currentPage - 1) * ROWS_PER_PAGE;
   const end = start + ROWS_PER_PAGE;
-  const pageItems = filtered.slice(start, end);
 
-  pageItems.forEach(x => {
+  filtered.slice(start, end).forEach(x => {
     const tr = document.createElement("tr");
     tr.className = x.tag;
     tr.innerHTML = `
@@ -204,6 +220,7 @@ function prevPage() {
     render();
   }
 }
+
 function nextPage() {
   const pages = Math.ceil(filtered.length / ROWS_PER_PAGE);
   if (currentPage < pages) {
@@ -242,6 +259,7 @@ function toggleWhite() {
   black.delete(selectedName);
   filter();
 }
+
 function toggleBlack() {
   if (!selectedName) return;
   if (black.has(selectedName)) black.delete(selectedName);
