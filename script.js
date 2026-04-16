@@ -91,8 +91,8 @@ function filter() {
     let gender = val("gender");
     if (gender === "Chlapecká + N" && !(g === "MUZ" || g === "NEUTRALNI")) continue;
     if (gender === "Dívčí + N" && !(g === "ZENA" || g === "NEUTRALNI")) continue;
-    if (gender === "Pouze chlapecká" && g !== "MUZ") continue;
-    if (gender === "Pouze dívčí" && g !== "ZENA") continue;
+    if (gender === "Chlapecká" && g !== "MUZ") continue;
+    if (gender === "Dívčí" && g !== "ZENA") continue;
     if (gender === "Neutrální" && g !== "NEUTRALNI") continue;
 
     // diacritics
@@ -154,8 +154,8 @@ function buildFull(n, g) {
   if (gender === "Chlapecká + N") return g === "ZENA" ? n : (m ? `${n} ${m}` : n);
   if (gender === "Dívčí + N") return g === "MUZ" ? n : (f ? `${n} ${f}` : n);
 
-  if (gender === "Pouze chlapecká") return m ? `${n} ${m}` : n;
-  if (gender === "Pouze dívčí") return f ? `${n} ${f}` : n;
+  if (gender === "Chlapecká") return m ? `${n} ${m}` : n;
+  if (gender === "Dívčí") return f ? `${n} ${f}` : n;
 
   if (gender === "Neutrální")
     return (m || f) ? `${n} ${m} / ${n} ${f}` : n;
