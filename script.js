@@ -4,7 +4,7 @@ let black = new Set();
 let filtered = [];
 let selectedName = null;
 
-// 🔒 ochrana proti mazání localStorage při startu
+// ochrana proti přepsání localStorage při startu
 let initializing = true;
 
 const STORAGE_KEY = "jmena_app_state";
@@ -39,8 +39,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
       filter();
       updateExportButton();
-
-      // 🔓 od této chvíle už je bezpečné ukládat stav
       initializing = false;
     });
 });
@@ -57,15 +55,15 @@ function loadState() {
       for (let id in data.filters) {
         const el = document.getElementById(id);
         if (!el) continue;
-        if (el.type === "checkbox") el.checked = data.filters[id];
-        else el.value = data.filters[id];
+        el.type === "checkbox"
+          ? (el.checked = data.filters[id])
+          : (el.value = data.filters[id]);
       }
     }
   } catch {}
 }
 
 function saveState() {
-  // ⛔ nikdy neukládat stav během inicializace
   if (initializing) return;
 
   const filters = {};
@@ -92,7 +90,9 @@ function filter() {
   for (let [g, name] of names) {
     if (!name) continue;
 
-    let n = name.trim();
+    // ✅ PŮVODNÍ NORMALIZACE JMÉNA
+    let n = name.trim().toLowerCase();
+    n = n.charAt(0).toUpperCase() + n.slice(1);
     let t = n.toLowerCase();
 
     // list filter
@@ -109,20 +109,20 @@ function filter() {
 
     // diacritics
     if (checked("no_diacritics") && hasDiacritics(n)) continue;
-    if (checked("cz_only")) {
-      if ([...t].some(c => !CZ_CHARS.has(c))) continue;
-    }
+    if (checked("cz_only") && [...t].some(c => !CZ_CHARS.has(c))) continue;
 
     // text filters
     if (val("start") && !t.startsWith(val("start").toLowerCase())) continue;
+    if (val("contains") && !t.includes(val("contains").toLowerCase())) continue;
+
     let ne = val("not_end").toLowerCase().split(",").map(s => s.trim()).filter(Boolean);
     if (ne.some(p => t.endsWith(p))) continue;
-    if (val("contains") && !t.includes(val("contains").toLowerCase())) continue;
+
     let nc = val("not_contains").toLowerCase().split(",").map(s => s.trim()).filter(Boolean);
     if (nc.some(p => t.includes(p))) continue;
+
     if (!checked("allow_double") && /(.)\1/.test(t)) continue;
 
-    // length filters
     let len = t.length;
     if (val("exact_len")) {
       if (len !== parseInt(val("exact_len"))) continue;
@@ -153,14 +153,11 @@ function filter() {
 
 // ---------------- FULL NAME ----------------
 function buildFull(n, g) {
-  let m = document.getElementById("sur_m").value;
-  let f = document.getElementById("sur_f").value;
-
+  let m = val("sur_m");
+  let f = val("sur_f");
   if (g === "MUZ") return m ? `${n} ${m}` : n;
   if (g === "ZENA") return f ? `${n} ${f}` : n;
-  return (m || f)
-    ? [m ? `${n} ${m}` : n, f ? `${n} ${f}` : n].join(" / ")
-    : n;
+  return (m || f) ? `${n} ${m} / ${n} ${f}` : n;
 }
 
 // ---------------- RENDER ----------------
@@ -198,11 +195,13 @@ function exportLists() {
 
   const wb = XLSX.utils.book_new();
 
-  function addSheet(set, sheetName) {
+  function addSheet(set, name) {
     const rows = [["Pohlaví", "Jméno", "Celé jméno"]];
 
     [...set].forEach(n => {
-      const found = names.find(([, name]) => name === n);
+      const found = names.find(([, name]) =>
+        name.toLowerCase() === n.toLowerCase()
+      );
       if (!found) return;
 
       const g = found[0];
@@ -214,11 +213,7 @@ function exportLists() {
     });
 
     if (rows.length > 1) {
-      XLSX.utils.book_append_sheet(
-        wb,
-        XLSX.utils.aoa_to_sheet(rows),
-        sheetName
-      );
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), name);
     }
   }
 
@@ -236,24 +231,20 @@ function exportLists() {
 
 // ---------------- EVENTS ----------------
 function bindEvents() {
-  document.querySelectorAll("input, select").forEach(el => {
-    el.addEventListener("input", filter);
-  });
+  document.querySelectorAll("input, select").forEach(el =>
+    el.addEventListener("input", filter)
+  );
 }
 
 // ---------------- HELPERS ----------------
-function val(id) {
-  return document.getElementById(id).value;
-}
-function checked(id) {
-  return document.getElementById(id).checked;
-}
+function val(id) { return document.getElementById(id).value; }
+function checked(id) { return document.getElementById(id).checked; }
 
 // ---------------- RANDOM ----------------
 function randomPick() {
-  if (!filtered.length) return;
-  document.getElementById("random").innerText =
-    filtered[Math.floor(Math.random() * filtered.length)].n;
+  if (filtered.length)
+    document.getElementById("random").innerText =
+      filtered[Math.floor(Math.random() * filtered.length)].n;
 }
 
 // ---------------- TOGGLES ----------------
