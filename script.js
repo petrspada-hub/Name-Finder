@@ -24,6 +24,7 @@ function hasDiacritics(text) {
 document.addEventListener("DOMContentLoaded", () => {
   loadState();
   bindEvents();
+
   fetch("jmena.csv")
     .then(r => r.text())
     .then(text => {
@@ -33,6 +34,7 @@ document.addEventListener("DOMContentLoaded", () => {
         .filter(r => r.length >= 2 && r[0] && r[1])
         .map(r => [r[0].trim().toUpperCase(), r[1].trim()]);
       filter();
+      updateExportButton();
     });
 });
 
@@ -79,8 +81,7 @@ function filter() {
   for (let [g, name] of names) {
     if (!name) continue;
 
-    let n = name.trim().toLowerCase();
-    n = n.charAt(0).toUpperCase() + n.slice(1);
+    let n = name.trim();
     let t = n.toLowerCase();
 
     // list filter
@@ -97,9 +98,8 @@ function filter() {
 
     // diacritics
     if (checked("no_diacritics") && hasDiacritics(n)) continue;
-
     if (checked("cz_only")) {
-      if ([...n.toLowerCase()].some(c => !CZ_CHARS.has(c))) continue;
+      if ([...t].some(c => !CZ_CHARS.has(c))) continue;
     }
 
     // text filters
@@ -129,7 +129,7 @@ function filter() {
     let mark = white.has(n) ? "⭐" : black.has(n) ? "❌" : "";
     let tag = g === "MUZ" ? "male" : g === "ZENA" ? "female" : "neutral";
 
-    filtered.push({ icon, n, full, mark, tag });
+    filtered.push({ icon, n, full, mark, tag, g });
   }
 
   filtered.sort((a, b) =>
@@ -142,6 +142,7 @@ function filter() {
   lastResultCount = filtered.length;
 
   render();
+  updateExportButton();
   saveState();
 }
 
@@ -149,20 +150,9 @@ function filter() {
 function buildFull(n, g) {
   let m = document.getElementById("sur_m").value;
   let f = document.getElementById("sur_f").value;
-  let gender = document.getElementById("gender").value;
-
-  if (gender === "Chlapecká + N") return g === "ZENA" ? n : (m ? `${n} ${m}` : n);
-  if (gender === "Dívčí + N") return g === "MUZ" ? n : (f ? `${n} ${f}` : n);
-
-  if (gender === "Chlapecká") return m ? `${n} ${m}` : n;
-  if (gender === "Dívčí") return f ? `${n} ${f}` : n;
-
-  if (gender === "Neutrální")
-    return (m || f) ? `${n} ${m} / ${n} ${f}` : n;
 
   if (g === "MUZ") return m ? `${n} ${m}` : n;
   if (g === "ZENA") return f ? `${n} ${f}` : n;
-
   return (m || f)
     ? [m ? `${n} ${m}` : n, f ? `${n} ${f}` : n].join(" / ")
     : n;
@@ -172,11 +162,7 @@ function buildFull(n, g) {
 function render() {
   const table = document.getElementById("table");
   table.innerHTML = "";
-
-  const start = (currentPage - 1) * ROWS_PER_PAGE;
-  const end = start + ROWS_PER_PAGE;
-
-  filtered.slice(start, end).forEach(x => {
+  filtered.forEach(x => {
     const tr = document.createElement("tr");
     tr.className = x.tag;
     tr.innerHTML = `
@@ -185,97 +171,61 @@ function render() {
       <td>${x.full}</td>
       <td>${x.mark}</td>
     `;
-    tr.addEventListener("click", () => {
+    tr.onclick = () => {
       selectedName = x.n;
       document.querySelectorAll("tr").forEach(r => r.classList.remove("selected"));
       tr.classList.add("selected");
-    });
+    };
     table.appendChild(tr);
   });
-
-  renderPagination();
 }
 
-// ---------------- PAGINATION ----------------
+// ---------------- EXPORT ----------------
+function updateExportButton() {
+  const btn = document.getElementById("exportBtn");
+  if (!btn) return;
+  btn.style.display = (white.size || black.size) ? "inline-block" : "none";
+}
 
-function renderPagination() {
-  let p = document.getElementById("pagination");
-  if (!p) {
-    p = document.createElement("div");
-    p.id = "pagination";
-    p.style.margin = "10px 0";
-    p.style.display = "flex";
-    p.style.gap = "12px";
-    p.style.alignItems = "center";
-    document.body.appendChild(p);
+function exportLists() {
+  if (!white.size && !black.size) return;
+
+  const wb = XLSX.utils.book_new();
+
+  function addSheet(set, sheetName) {
+    const rows = [["Pohlaví", "Jméno", "Celé jméno"]];
+
+    [...set].forEach(n => {
+      const found = names.find(([, name]) => name === n);
+      if (!found) return;
+
+      const g = found[0];
+      const gender =
+        g === "MUZ" ? "Chlapecké" :
+        g === "ZENA" ? "Dívčí" : "Neutrální";
+
+      rows.push([gender, n, buildFull(n, g)]);
+    });
+
+    if (rows.length > 1) {
+      XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.aoa_to_sheet(rows),
+        sheetName
+      );
+    }
   }
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / ROWS_PER_PAGE));
-  if (currentPage > totalPages) currentPage = totalPages;
+  addSheet(white, "Oblíbené");
+  addSheet(black, "Veto");
 
-  p.innerHTML = `
-    <button id="prevPage" ${currentPage === 1 ? "disabled" : ""}>←</button>
+  const d = new Date();
+  const stamp =
+    String(d.getFullYear()).slice(2) +
+    String(d.getMonth() + 1).padStart(2, "0") +
+    String(d.getDate()).padStart(2, "0");
 
-    <span>
-      Strana
-      <input id="pageInput"
-             type="number"
-             min="1"
-             max="${totalPages}"
-             value="${currentPage}"
-             style="width:60px">
-      / ${totalPages}
-    </span>
-
-    <button id="nextPage" ${currentPage === totalPages ? "disabled" : ""}>→</button>
-
-    <span style="margin-left:20px">
-      Řádků:
-      <input id="rowsInput"
-             type="number"
-             min="1"
-             value="${ROWS_PER_PAGE}"
-             style="width:70px">
-    </span>
-  `;
-
-  // ← →
-  document.getElementById("prevPage").onclick = () => {
-    if (currentPage > 1) {
-      currentPage--;
-      render();
-    }
-  };
-
-  document.getElementById("nextPage").onclick = () => {
-    if (currentPage < totalPages) {
-      currentPage++;
-      render();
-    }
-  };
-
-  // ruční stránka
-  document.getElementById("pageInput").onchange = e => {
-    let v = parseInt(e.target.value);
-    if (isNaN(v)) return;
-    currentPage = Math.min(Math.max(1, v), totalPages);
-    render();
-  };
-
-  // ruční počet řádků – BEZ zásahu do filtrů
-  document.getElementById("rowsInput").onchange = e => {
-    let v = parseInt(e.target.value);
-    if (isNaN(v) || v < 1) return;
-
-    const oldPages = Math.ceil(filtered.length / ROWS_PER_PAGE);
-    ROWS_PER_PAGE = v;
-    const newPages = Math.ceil(filtered.length / ROWS_PER_PAGE);
-
-    if (oldPages !== newPages && currentPage > newPages) {
-      currentPage = 1;
-    }
-    render();
-  };
+  XLSX.writeFile(wb, `Name-Finder_My-Names_${stamp}.xlsx`);
 }
 
 // ---------------- EVENTS ----------------
@@ -303,16 +253,16 @@ function randomPick() {
 // ---------------- TOGGLES ----------------
 function toggleWhite() {
   if (!selectedName) return;
-  if (white.has(selectedName)) white.delete(selectedName);
-  else white.add(selectedName);
+  white.has(selectedName) ? white.delete(selectedName) : white.add(selectedName);
   black.delete(selectedName);
+  updateExportButton();
   filter();
 }
 
 function toggleBlack() {
   if (!selectedName) return;
-  if (black.has(selectedName)) black.delete(selectedName);
-  else black.add(selectedName);
+  black.has(selectedName) ? black.delete(selectedName) : black.add(selectedName);
   white.delete(selectedName);
+  updateExportButton();
   filter();
 }
