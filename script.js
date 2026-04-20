@@ -4,8 +4,6 @@ let black = new Set();
 let filtered = [];
 let selectedName = null;
 
-let initializing = true;
-
 const STORAGE_KEY = "jmena_app_state";
 const CZ_CHARS = new Set("aábcčdďeěéfghiíjklmnňoópqrřsštťuúůvwxyýzž");
 
@@ -26,7 +24,6 @@ function hasDiacritics(text) {
 document.addEventListener("DOMContentLoaded", () => {
   loadState();
   bindEvents();
-
   fetch("jmena.csv")
     .then(r => r.text())
     .then(text => {
@@ -35,10 +32,7 @@ document.addEventListener("DOMContentLoaded", () => {
         .map(r => r.split(","))
         .filter(r => r.length >= 2 && r[0] && r[1])
         .map(r => [r[0].trim().toUpperCase(), r[1].trim()]);
-
       filter();
-      updateExportButton();
-      initializing = false;
     });
 });
 
@@ -54,23 +48,19 @@ function loadState() {
       for (let id in data.filters) {
         const el = document.getElementById(id);
         if (!el) continue;
-        el.type === "checkbox"
-          ? (el.checked = data.filters[id])
-          : (el.value = data.filters[id]);
+        if (el.type === "checkbox") el.checked = data.filters[id];
+        else el.value = data.filters[id];
       }
     }
   } catch {}
 }
 
 function saveState() {
-  if (initializing) return;
-
   const filters = {};
   document.querySelectorAll("input, select").forEach(el => {
     if (!el.id) return;
     filters[el.id] = el.type === "checkbox" ? el.checked : el.value;
   });
-
   localStorage.setItem(
     STORAGE_KEY,
     JSON.stringify({
@@ -87,60 +77,96 @@ function filter() {
   filtered = [];
 
   for (let [g, name] of names) {
-    let n = name.toLowerCase();
+    if (!name) continue;
+
+    let n = name.trim().toLowerCase();
     n = n.charAt(0).toUpperCase() + n.slice(1);
     let t = n.toLowerCase();
 
+    // list filter
     if (val("list_filter") === "Oblíbené" && !white.has(n)) continue;
     if (val("list_filter") === "Veto" && !black.has(n)) continue;
 
+    // gender
     let gender = val("gender");
+    if (gender === "Chlapecká + N" && !(g === "MUZ" || g === "NEUTRALNI")) continue;
+    if (gender === "Dívčí + N" && !(g === "ZENA" || g === "NEUTRALNI")) continue;
     if (gender === "Chlapecká" && g !== "MUZ") continue;
     if (gender === "Dívčí" && g !== "ZENA") continue;
     if (gender === "Neutrální" && g !== "NEUTRALNI") continue;
-    if (gender === "Chlapecká + N" && !(g === "MUZ" || g === "NEUTRALNI")) continue;
-    if (gender === "Dívčí + N" && !(g === "ZENA" || g === "NEUTRALNI")) continue;
 
+    // diacritics
     if (checked("no_diacritics") && hasDiacritics(n)) continue;
-    if (checked("cz_only") && [...t].some(c => !CZ_CHARS.has(c))) continue;
 
+    if (checked("cz_only")) {
+      if ([...n.toLowerCase()].some(c => !CZ_CHARS.has(c))) continue;
+    }
+
+    // text filters
     if (val("start") && !t.startsWith(val("start").toLowerCase())) continue;
+
+    let ne = val("not_end").toLowerCase().split(",").map(s => s.trim()).filter(Boolean);
+    if (ne.some(p => t.endsWith(p))) continue;
+
     if (val("contains") && !t.includes(val("contains").toLowerCase())) continue;
+
+    let nc = val("not_contains").toLowerCase().split(",").map(s => s.trim()).filter(Boolean);
+    if (nc.some(p => t.includes(p))) continue;
 
     if (!checked("allow_double") && /(.)\1/.test(t)) continue;
 
+    // length filters
     let len = t.length;
-    if (val("exact_len") && len !== +val("exact_len")) continue;
-    if (!val("exact_len")) {
-      if (val("min_len") && len < +val("min_len")) continue;
-      if (val("max_len") && len > +val("max_len")) continue;
+    if (val("exact_len")) {
+      if (len !== parseInt(val("exact_len"))) continue;
+    } else {
+      if (val("min_len") && len < parseInt(val("min_len"))) continue;
+      if (val("max_len") && len > parseInt(val("max_len"))) continue;
     }
 
-    const icon = g === "MUZ" ? "♂" : g === "ZENA" ? "♀" : "○";
-    const full = buildFull(n, g);
-    const mark = white.has(n) ? "⭐" : black.has(n) ? "❌" : "";
-    const tag = g === "MUZ" ? "male" : g === "ZENA" ? "female" : "neutral";
+    let icon = g === "MUZ" ? "♂" : g === "ZENA" ? "♀" : "○";
+    let full = buildFull(n, g);
+    let mark = white.has(n) ? "⭐" : black.has(n) ? "❌" : "";
+    let tag = g === "MUZ" ? "male" : g === "ZENA" ? "female" : "neutral";
 
-    filtered.push({ icon, n, full, mark, tag, g });
+    filtered.push({ icon, n, full, mark, tag });
   }
 
-  filtered.sort((a, b) => a.n.localeCompare(b.n, "cs"));
-  if (oldCount !== null && oldCount !== filtered.length) currentPage = 1;
+  filtered.sort((a, b) =>
+    a.n.localeCompare(b.n, "cs", { sensitivity: "base" })
+  );
+
+  if (oldCount !== null && oldCount !== filtered.length) {
+    currentPage = 1;
+  }
   lastResultCount = filtered.length;
 
   render();
-  renderPagination();
   updateExportButton();
   saveState();
 }
 
 // ---------------- FULL NAME ----------------
 function buildFull(n, g) {
-  const m = val("sur_m");
-  const f = val("sur_f");
+  let m = document.getElementById("sur_m").value;
+  let f = document.getElementById("sur_f").value;
+  let gender = document.getElementById("gender").value;
+
+  if (gender === "Chlapecká + N") return g === "ZENA" ? n : (m ? `${n} ${m}` : n);
+  if (gender === "Dívčí + N") return g === "MUZ" ? n : (f ? `${n} ${f}` : n);
+
+  if (gender === "Chlapecká") return m ? `${n} ${m}` : n;
+  if (gender === "Dívčí") return f ? `${n} ${f}` : n;
+
+  if (gender === "Neutrální")
+    return (m || f) ? `${n} ${m} / ${n} ${f}` : n;
+
   if (g === "MUZ") return m ? `${n} ${m}` : n;
   if (g === "ZENA") return f ? `${n} ${f}` : n;
-  return (m || f) ? `${n} ${m} / ${n} ${f}` : n;
+
+  return (m || f)
+    ? [m ? `${n} ${m}` : n, f ? `${n} ${f}` : n].join(" / ")
+    : n;
 }
 
 // ---------------- RENDER ----------------
@@ -160,16 +186,19 @@ function render() {
       <td>${x.full}</td>
       <td>${x.mark}</td>
     `;
-    tr.onclick = () => {
+    tr.addEventListener("click", () => {
       selectedName = x.n;
       document.querySelectorAll("tr").forEach(r => r.classList.remove("selected"));
       tr.classList.add("selected");
-    };
+    });
     table.appendChild(tr);
   });
+
+  renderPagination();
 }
 
 // ---------------- PAGINATION ----------------
+
 function renderPagination() {
   let p = document.getElementById("pagination");
   if (!p) {
@@ -178,6 +207,7 @@ function renderPagination() {
     p.style.margin = "10px 0";
     p.style.display = "flex";
     p.style.gap = "12px";
+    p.style.alignItems = "center";
     document.body.appendChild(p);
   }
 
@@ -185,13 +215,85 @@ function renderPagination() {
   if (currentPage > totalPages) currentPage = totalPages;
 
   p.innerHTML = `
-    <button ${currentPage === 1 ? "disabled" : ""} onclick="currentPage--; render(); renderPagination()">←</button>
-    <span>Strana ${currentPage} / ${totalPages}</span>
-    <button ${currentPage === totalPages ? "disabled" : ""} onclick="currentPage++; render(); renderPagination()">→</button>
+    <button id="prevPage" ${currentPage === 1 ? "disabled" : ""}>←</button>
+
+    <span>
+      Strana
+      <input id="pageInput"
+             type="number"
+             min="1"
+             max="${totalPages}"
+             value="${currentPage}"
+             style="width:60px">
+      / ${totalPages}
+    </span>
+
+    <button id="nextPage" ${currentPage === totalPages ? "disabled" : ""}>→</button>
+
+    <span style="margin-left:20px">
+      Řádků:
+      <input id="rowsInput"
+             type="number"
+             min="1"
+             value="${ROWS_PER_PAGE}"
+             style="width:70px">
+    </span>
   `;
+
+  // ← →
+  document.getElementById("prevPage").onclick = () => {
+    if (currentPage > 1) {
+      currentPage--;
+      render();
+    }
+  };
+
+  document.getElementById("nextPage").onclick = () => {
+    if (currentPage < totalPages) {
+      currentPage++;
+      render();
+    }
+  };
+
+  // ruční stránka
+  document.getElementById("pageInput").onchange = e => {
+    let v = parseInt(e.target.value);
+    if (isNaN(v)) return;
+    currentPage = Math.min(Math.max(1, v), totalPages);
+    render();
+  };
+
+  // ruční počet řádků – BEZ zásahu do filtrů
+  document.getElementById("rowsInput").onchange = e => {
+    let v = parseInt(e.target.value);
+    if (isNaN(v) || v < 1) return;
+
+    const oldPages = Math.ceil(filtered.length / ROWS_PER_PAGE);
+    ROWS_PER_PAGE = v;
+    const newPages = Math.ceil(filtered.length / ROWS_PER_PAGE);
+
+    if (oldPages !== newPages && currentPage > newPages) {
+      currentPage = 1;
+    }
+    render();
+  };
 }
 
-// ---------------- EXPORT ----------------
+// ---------------- EVENTS ----------------
+function bindEvents() {
+  document.querySelectorAll("input, select").forEach(el => {
+    el.addEventListener("input", filter);
+  });
+}
+
+// ---------------- HELPERS ----------------
+function val(id) {
+  return document.getElementById(id).value;
+}
+function checked(id) {
+  return document.getElementById(id).checked;
+}
+
 function updateExportButton() {
   const btn = document.getElementById("exportBtn");
   if (!btn) return;
@@ -199,21 +301,38 @@ function updateExportButton() {
 }
 
 function exportLists() {
+  if (!white.size && !black.size) return;
+
   const wb = XLSX.utils.book_new();
 
-  function addSheet(set, name) {
+  function addSheet(set, sheetName) {
     const rows = [["Pohlaví", "Jméno", "Celé jméno"]];
+
     [...set].forEach(n => {
-      const found = names.find(([, nm]) => nm.toLowerCase() === n.toLowerCase());
+      const found = names.find(([, name]) =>
+        name.toLowerCase() === n.toLowerCase()
+      );
       if (!found) return;
+
       const g = found[0];
+      const gender =
+        g === "MUZ" ? "Chlapecké" :
+        g === "ZENA" ? "Dívčí" : "Neutrální";
+
       rows.push([
-        g === "MUZ" ? "Chlapecké" : g === "ZENA" ? "Dívčí" : "Neutrální",
+        gender,
         n,
         buildFull(n, g)
       ]);
     });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), name);
+
+    if (rows.length > 1) {
+      XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.aoa_to_sheet(rows),
+        sheetName
+      );
+    }
   }
 
   addSheet(white, "Oblíbené");
@@ -228,33 +347,27 @@ function exportLists() {
   XLSX.writeFile(wb, `Name-Finder_My-Names_${stamp}.xlsx`);
 }
 
-// ---------------- HELPERS ----------------
-function bindEvents() {
-  document.querySelectorAll("input, select").forEach(el =>
-    el.addEventListener("input", filter)
-  );
-}
-function val(id) { return document.getElementById(id).value; }
-function checked(id) { return document.getElementById(id).checked; }
-
 // ---------------- RANDOM ----------------
 function randomPick() {
-  if (filtered.length)
-    document.getElementById("random").innerText =
-      filtered[Math.floor(Math.random() * filtered.length)].n;
+  if (!filtered.length) return;
+  document.getElementById("random").innerText =
+    filtered[Math.floor(Math.random() * filtered.length)].n;
 }
 
 // ---------------- TOGGLES ----------------
 function toggleWhite() {
   if (!selectedName) return;
-  white.has(selectedName) ? white.delete(selectedName) : white.add(selectedName);
+  if (white.has(selectedName)) white.delete(selectedName);
+  else white.add(selectedName);
   black.delete(selectedName);
   updateExportButton();
   filter();
 }
+
 function toggleBlack() {
   if (!selectedName) return;
-  black.has(selectedName) ? black.delete(selectedName) : black.add(selectedName);
+  if (black.has(selectedName)) black.delete(selectedName);
+  else black.add(selectedName);
   white.delete(selectedName);
   updateExportButton();
   filter();
