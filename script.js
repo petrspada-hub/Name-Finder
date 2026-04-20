@@ -24,6 +24,7 @@ function hasDiacritics(text) {
 document.addEventListener("DOMContentLoaded", () => {
   loadState();
   bindEvents();
+
   fetch("jmena.csv")
     .then(r => r.text())
     .then(text => {
@@ -61,6 +62,7 @@ function saveState() {
     if (!el.id) return;
     filters[el.id] = el.type === "checkbox" ? el.checked : el.value;
   });
+
   localStorage.setItem(
     STORAGE_KEY,
     JSON.stringify({
@@ -97,25 +99,20 @@ function filter() {
 
     // diacritics
     if (checked("no_diacritics") && hasDiacritics(n)) continue;
-
     if (checked("cz_only")) {
       if ([...n.toLowerCase()].some(c => !CZ_CHARS.has(c))) continue;
     }
 
     // text filters
     if (val("start") && !t.startsWith(val("start").toLowerCase())) continue;
-
     let ne = val("not_end").toLowerCase().split(",").map(s => s.trim()).filter(Boolean);
     if (ne.some(p => t.endsWith(p))) continue;
-
     if (val("contains") && !t.includes(val("contains").toLowerCase())) continue;
-
     let nc = val("not_contains").toLowerCase().split(",").map(s => s.trim()).filter(Boolean);
     if (nc.some(p => t.includes(p))) continue;
-
     if (!checked("allow_double") && /(.)\1/.test(t)) continue;
 
-    // length filters
+    // length
     let len = t.length;
     if (val("exact_len")) {
       if (len !== parseInt(val("exact_len"))) continue;
@@ -129,43 +126,36 @@ function filter() {
     let mark = white.has(n) ? "⭐" : black.has(n) ? "❌" : "";
     let tag = g === "MUZ" ? "male" : g === "ZENA" ? "female" : "neutral";
 
-    filtered.push({ icon, n, full, mark, tag });
+    filtered.push({ icon, n, full, mark, tag, g });
   }
 
   filtered.sort((a, b) =>
     a.n.localeCompare(b.n, "cs", { sensitivity: "base" })
   );
 
-  if (oldCount !== null && oldCount !== filtered.length) {
-    currentPage = 1;
-  }
+  if (oldCount !== null && oldCount !== filtered.length) currentPage = 1;
   lastResultCount = filtered.length;
 
   render();
+  updateExportButton();
   saveState();
 }
 
 // ---------------- FULL NAME ----------------
 function buildFull(n, g) {
-  let m = document.getElementById("sur_m").value;
-  let f = document.getElementById("sur_f").value;
-  let gender = document.getElementById("gender").value;
+  let m = val("sur_m");
+  let f = val("sur_f");
+  let gender = val("gender");
 
   if (gender === "Chlapecká + N") return g === "ZENA" ? n : (m ? `${n} ${m}` : n);
   if (gender === "Dívčí + N") return g === "MUZ" ? n : (f ? `${n} ${f}` : n);
-
   if (gender === "Chlapecká") return m ? `${n} ${m}` : n;
   if (gender === "Dívčí") return f ? `${n} ${f}` : n;
-
-  if (gender === "Neutrální")
-    return (m || f) ? `${n} ${m} / ${n} ${f}` : n;
+  if (gender === "Neutrální") return (m || f) ? `${n} ${m} / ${n} ${f}` : n;
 
   if (g === "MUZ") return m ? `${n} ${m}` : n;
   if (g === "ZENA") return f ? `${n} ${f}` : n;
-
-  return (m || f)
-    ? [m ? `${n} ${m}` : n, f ? `${n} ${f}` : n].join(" / ")
-    : n;
+  return (m || f) ? `${n} ${m} / ${n} ${f}` : n;
 }
 
 // ---------------- RENDER ----------------
@@ -185,97 +175,53 @@ function render() {
       <td>${x.full}</td>
       <td>${x.mark}</td>
     `;
-    tr.addEventListener("click", () => {
+    tr.onclick = () => {
       selectedName = x.n;
       document.querySelectorAll("tr").forEach(r => r.classList.remove("selected"));
       tr.classList.add("selected");
-    });
+    };
     table.appendChild(tr);
   });
 
   renderPagination();
 }
 
-// ---------------- PAGINATION ----------------
+// ---------------- EXPORT ----------------
+function updateExportButton() {
+  const btn = document.getElementById("exportBtn");
+  if (!btn) return;
+  btn.style.display = (white.size || black.size) ? "inline-block" : "none";
+}
 
-function renderPagination() {
-  let p = document.getElementById("pagination");
-  if (!p) {
-    p = document.createElement("div");
-    p.id = "pagination";
-    p.style.margin = "10px 0";
-    p.style.display = "flex";
-    p.style.gap = "12px";
-    p.style.alignItems = "center";
-    document.body.appendChild(p);
+function exportLists() {
+  const wb = XLSX.utils.book_new();
+
+  function sheetFromSet(set, label) {
+    const rows = [["Pohlaví", "Jméno", "Celé jméno"]];
+    [...set].forEach(n => {
+      const item = names.find(x => x[1] === n);
+      if (!item) return;
+
+      const g = item[0];
+      const gender = g === "MUZ" ? "Chlapecké" : g === "ZENA" ? "Dívčí" : "Neutrální";
+
+      rows.push([gender, n, buildFull(n, g)]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, label);
   }
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / ROWS_PER_PAGE));
-  if (currentPage > totalPages) currentPage = totalPages;
+  if (white.size) sheetFromSet(white, "Oblíbené");
+  if (black.size) sheetFromSet(black, "Veto");
 
-  p.innerHTML = `
-    <button id="prevPage" ${currentPage === 1 ? "disabled" : ""}>←</button>
+  const d = new Date();
+  const stamp =
+    String(d.getFullYear()).slice(2) +
+    String(d.getMonth() + 1).padStart(2, "0") +
+    String(d.getDate()).padStart(2, "0");
 
-    <span>
-      Strana
-      <input id="pageInput"
-             type="number"
-             min="1"
-             max="${totalPages}"
-             value="${currentPage}"
-             style="width:60px">
-      / ${totalPages}
-    </span>
-
-    <button id="nextPage" ${currentPage === totalPages ? "disabled" : ""}>→</button>
-
-    <span style="margin-left:20px">
-      Řádků:
-      <input id="rowsInput"
-             type="number"
-             min="1"
-             value="${ROWS_PER_PAGE}"
-             style="width:70px">
-    </span>
-  `;
-
-  // ← →
-  document.getElementById("prevPage").onclick = () => {
-    if (currentPage > 1) {
-      currentPage--;
-      render();
-    }
-  };
-
-  document.getElementById("nextPage").onclick = () => {
-    if (currentPage < totalPages) {
-      currentPage++;
-      render();
-    }
-  };
-
-  // ruční stránka
-  document.getElementById("pageInput").onchange = e => {
-    let v = parseInt(e.target.value);
-    if (isNaN(v)) return;
-    currentPage = Math.min(Math.max(1, v), totalPages);
-    render();
-  };
-
-  // ruční počet řádků – BEZ zásahu do filtrů
-  document.getElementById("rowsInput").onchange = e => {
-    let v = parseInt(e.target.value);
-    if (isNaN(v) || v < 1) return;
-
-    const oldPages = Math.ceil(filtered.length / ROWS_PER_PAGE);
-    ROWS_PER_PAGE = v;
-    const newPages = Math.ceil(filtered.length / ROWS_PER_PAGE);
-
-    if (oldPages !== newPages && currentPage > newPages) {
-      currentPage = 1;
-    }
-    render();
-  };
+  XLSX.writeFile(wb, `Name-Finder_My-Names_${stamp}.xlsx`);
 }
 
 // ---------------- EVENTS ----------------
@@ -286,12 +232,8 @@ function bindEvents() {
 }
 
 // ---------------- HELPERS ----------------
-function val(id) {
-  return document.getElementById(id).value;
-}
-function checked(id) {
-  return document.getElementById(id).checked;
-}
+function val(id) { return document.getElementById(id).value; }
+function checked(id) { return document.getElementById(id).checked; }
 
 // ---------------- RANDOM ----------------
 function randomPick() {
@@ -303,16 +245,14 @@ function randomPick() {
 // ---------------- TOGGLES ----------------
 function toggleWhite() {
   if (!selectedName) return;
-  if (white.has(selectedName)) white.delete(selectedName);
-  else white.add(selectedName);
+  white.has(selectedName) ? white.delete(selectedName) : white.add(selectedName);
   black.delete(selectedName);
   filter();
 }
 
 function toggleBlack() {
   if (!selectedName) return;
-  if (black.has(selectedName)) black.delete(selectedName);
-  else black.add(selectedName);
+  black.has(selectedName) ? black.delete(selectedName) : black.add(selectedName);
   white.delete(selectedName);
   filter();
 }
