@@ -4,6 +4,9 @@ let black = new Set();
 let filtered = [];
 let selectedName = null;
 
+// 🔒 ochrana proti mazání localStorage při startu
+let initializing = true;
+
 const STORAGE_KEY = "jmena_app_state";
 const CZ_CHARS = new Set("aábcčdďeěéfghiíjklmnňoópqrřsštťuúůvwxyýzž");
 
@@ -33,8 +36,12 @@ document.addEventListener("DOMContentLoaded", () => {
         .map(r => r.split(","))
         .filter(r => r.length >= 2 && r[0] && r[1])
         .map(r => [r[0].trim().toUpperCase(), r[1].trim()]);
+
       filter();
       updateExportButton();
+
+      // 🔓 od této chvíle už je bezpečné ukládat stav
+      initializing = false;
     });
 });
 
@@ -58,11 +65,15 @@ function loadState() {
 }
 
 function saveState() {
+  // ⛔ nikdy neukládat stav během inicializace
+  if (initializing) return;
+
   const filters = {};
   document.querySelectorAll("input, select").forEach(el => {
     if (!el.id) return;
     filters[el.id] = el.type === "checkbox" ? el.checked : el.value;
   });
+
   localStorage.setItem(
     STORAGE_KEY,
     JSON.stringify({
@@ -104,15 +115,11 @@ function filter() {
 
     // text filters
     if (val("start") && !t.startsWith(val("start").toLowerCase())) continue;
-
     let ne = val("not_end").toLowerCase().split(",").map(s => s.trim()).filter(Boolean);
     if (ne.some(p => t.endsWith(p))) continue;
-
     if (val("contains") && !t.includes(val("contains").toLowerCase())) continue;
-
     let nc = val("not_contains").toLowerCase().split(",").map(s => s.trim()).filter(Boolean);
     if (nc.some(p => t.includes(p))) continue;
-
     if (!checked("allow_double") && /(.)\1/.test(t)) continue;
 
     // length filters
@@ -136,9 +143,7 @@ function filter() {
     a.n.localeCompare(b.n, "cs", { sensitivity: "base" })
   );
 
-  if (oldCount !== null && oldCount !== filtered.length) {
-    currentPage = 1;
-  }
+  if (oldCount !== null && oldCount !== filtered.length) currentPage = 1;
   lastResultCount = filtered.length;
 
   render();
@@ -162,6 +167,7 @@ function buildFull(n, g) {
 function render() {
   const table = document.getElementById("table");
   table.innerHTML = "";
+
   filtered.forEach(x => {
     const tr = document.createElement("tr");
     tr.className = x.tag;
