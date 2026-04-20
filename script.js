@@ -1,4 +1,5 @@
 let names = [];
+let nameGenderMap = {};   // ← MAPA: jméno → pohlaví
 let white = new Set();
 let black = new Set();
 let filtered = [];
@@ -28,11 +29,20 @@ document.addEventListener("DOMContentLoaded", () => {
   fetch("jmena.csv")
     .then(r => r.text())
     .then(text => {
-      names = text
+      names = [];
+      nameGenderMap = {};
+
+      text
         .split(/\r?\n/)
         .map(r => r.split(","))
         .filter(r => r.length >= 2 && r[0] && r[1])
-        .map(r => [r[0].trim().toUpperCase(), r[1].trim()]);
+        .forEach(r => {
+          const g = r[0].trim().toUpperCase();
+          const n = r[1].trim();
+          names.push([g, n]);
+          nameGenderMap[n.toLowerCase()] = g;  // ← klíčový fix
+        });
+
       filter();
       updateExportButton();
     });
@@ -47,7 +57,6 @@ function loadState() {
     const data = JSON.parse(raw);
     white = new Set(data.white || []);
     black = new Set(data.black || []);
-
     if (data.filters) {
       for (let id in data.filters) {
         const el = document.getElementById(id);
@@ -66,14 +75,9 @@ function saveState() {
     if (!el.id) return;
     filters[el.id] = el.type === "checkbox" ? el.checked : el.value;
   });
-
   localStorage.setItem(
     STORAGE_KEY,
-    JSON.stringify({
-      white: [...white],
-      black: [...black],
-      filters
-    })
+    JSON.stringify({ white: [...white], black: [...black], filters })
   );
 }
 
@@ -83,63 +87,48 @@ function filter() {
   filtered = [];
 
   for (let [g, name] of names) {
-    if (!name) continue;
-
-    let n = name.trim().toLowerCase();
-    n = n.charAt(0).toUpperCase() + n.slice(1);
+    let n = name.trim();
     let t = n.toLowerCase();
 
-    // list filter
     if (val("list_filter") === "Oblíbené" && !white.has(n)) continue;
     if (val("list_filter") === "Veto" && !black.has(n)) continue;
 
-    // gender
     let gender = val("gender");
-    if (gender === "Chlapecká + N" && !(g === "MUZ" || g === "NEUTRALNI")) continue;
-    if (gender === "Dívčí + N" && !(g === "ZENA" || g === "NEUTRALNI")) continue;
     if (gender === "Chlapecká" && g !== "MUZ") continue;
     if (gender === "Dívčí" && g !== "ZENA") continue;
     if (gender === "Neutrální" && g !== "NEUTRALNI") continue;
+    if (gender === "Chlapecká + N" && !(g === "MUZ" || g === "NEUTRALNI")) continue;
+    if (gender === "Dívčí + N" && !(g === "ZENA" || g === "NEUTRALNI")) continue;
 
-    // diacritics
     if (checked("no_diacritics") && hasDiacritics(n)) continue;
-    if (checked("cz_only")) {
-      if ([...n.toLowerCase()].some(c => !CZ_CHARS.has(c))) continue;
-    }
+    if (checked("cz_only") && [...t].some(c => !CZ_CHARS.has(c))) continue;
 
-    // text filters
     if (val("start") && !t.startsWith(val("start").toLowerCase())) continue;
     if (val("contains") && !t.includes(val("contains").toLowerCase())) continue;
 
-    let ne = val("not_end").toLowerCase().split(",").map(s => s.trim()).filter(Boolean);
+    let ne = val("not_end").toLowerCase().split(",").filter(Boolean);
     if (ne.some(p => t.endsWith(p))) continue;
 
-    let nc = val("not_contains").toLowerCase().split(",").map(s => s.trim()).filter(Boolean);
+    let nc = val("not_contains").toLowerCase().split(",").filter(Boolean);
     if (nc.some(p => t.includes(p))) continue;
 
     if (!checked("allow_double") && /(.)\1/.test(t)) continue;
 
-    // length
     let len = t.length;
-    if (val("exact_len")) {
-      if (len !== parseInt(val("exact_len"))) continue;
-    } else {
-      if (val("min_len") && len < parseInt(val("min_len"))) continue;
-      if (val("max_len") && len > parseInt(val("max_len"))) continue;
+    if (val("exact_len") && len !== +val("exact_len")) continue;
+    if (!val("exact_len")) {
+      if (val("min_len") && len < +val("min_len")) continue;
+      if (val("max_len") && len > +val("max_len")) continue;
     }
 
     let icon = g === "MUZ" ? "♂" : g === "ZENA" ? "♀" : "○";
-    let full = buildFull(n, g);
     let mark = white.has(n) ? "⭐" : black.has(n) ? "❌" : "";
     let tag = g === "MUZ" ? "male" : g === "ZENA" ? "female" : "neutral";
 
-    filtered.push({ icon, n, full, mark, tag, g });
+    filtered.push({ icon, n, full: buildFull(n, g), mark, tag, g });
   }
 
-  filtered.sort((a, b) =>
-    a.n.localeCompare(b.n, "cs", { sensitivity: "base" })
-  );
-
+  filtered.sort((a, b) => a.n.localeCompare(b.n, "cs"));
   if (oldCount !== null && oldCount !== filtered.length) currentPage = 1;
   lastResultCount = filtered.length;
 
@@ -152,18 +141,8 @@ function filter() {
 function buildFull(n, g) {
   const m = val("sur_m");
   const f = val("sur_f");
-  const gf = val("gender");
-
-  if (gf === "Chlapecká") return m ? `${n} ${m}` : n;
-  if (gf === "Dívčí") return f ? `${n} ${f}` : n;
-  if (gf === "Chlapecká + N") return g === "ZENA" ? n : (m ? `${n} ${m}` : n);
-  if (gf === "Dívčí + N") return g === "MUZ" ? n : (f ? `${n} ${f}` : n);
-  if (gf === "Neutrální")
-    return (m || f) ? `${n} ${m} / ${n} ${f}` : n;
-
   if (g === "MUZ") return m ? `${n} ${m}` : n;
   if (g === "ZENA") return f ? `${n} ${f}` : n;
-
   return (m || f) ? `${n} ${m} / ${n} ${f}` : n;
 }
 
@@ -171,7 +150,6 @@ function buildFull(n, g) {
 function render() {
   const table = document.getElementById("table");
   table.innerHTML = "";
-
   const start = (currentPage - 1) * ROWS_PER_PAGE;
   const end = start + ROWS_PER_PAGE;
 
@@ -182,8 +160,7 @@ function render() {
       <td>${x.icon}</td>
       <td>${x.n}</td>
       <td>${x.full}</td>
-      <td>${x.mark}</td>
-    `;
+      <td>${x.mark}</td>`;
     tr.onclick = () => {
       selectedName = x.n;
       document.querySelectorAll("tr").forEach(r => r.classList.remove("selected"));
@@ -195,9 +172,8 @@ function render() {
 
 // ---------------- EXPORT ----------------
 function updateExportButton() {
-  const btn = document.getElementById("exportBtn");
-  if (!btn) return;
-  btn.style.display = (white.size || black.size) ? "inline-block" : "none";
+  document.getElementById("exportBtn").style.display =
+    (white.size || black.size) ? "inline-block" : "none";
 }
 
 function exportLists() {
@@ -207,28 +183,18 @@ function exportLists() {
 
   function addSheet(set, name) {
     const rows = [["Pohlaví", "Jméno", "Celé jméno"]];
-
     [...set].forEach(n => {
-      const item = names.find(x => x[1] === n);
-      if (!item) return;
-
-      const g = item[0];
-      const gender =
-        g === "MUZ" ? "Chlapecké" :
-        g === "ZENA" ? "Dívčí" : "Neutrální";
-
+      const g = nameGenderMap[n.toLowerCase()];
+      if (!g) return;
+      const gender = g === "MUZ" ? "Chlapecké" : g === "ZENA" ? "Dívčí" : "Neutrální";
       rows.push([gender, n, buildFull(n, g)]);
     });
-
-    XLSX.utils.book_append_sheet(
-      wb,
-      XLSX.utils.aoa_to_sheet(rows),
-      name
-    );
+    if (rows.length > 1)
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), name);
   }
 
-  if (white.size) addSheet(white, "Oblíbené");
-  if (black.size) addSheet(black, "Veto");
+  addSheet(white, "Oblíbené");
+  addSheet(black, "Veto");
 
   const d = new Date();
   const stamp =
@@ -239,22 +205,20 @@ function exportLists() {
   XLSX.writeFile(wb, `Name-Finder_My-Names_${stamp}.xlsx`);
 }
 
-// ---------------- EVENTS ----------------
-function bindEvents() {
-  document.querySelectorAll("input, select").forEach(el => {
-    el.addEventListener("input", filter);
-  });
-}
-
 // ---------------- HELPERS ----------------
+function bindEvents() {
+  document.querySelectorAll("input, select").forEach(el =>
+    el.addEventListener("input", filter)
+  );
+}
 function val(id) { return document.getElementById(id).value; }
 function checked(id) { return document.getElementById(id).checked; }
 
 // ---------------- RANDOM ----------------
 function randomPick() {
-  if (!filtered.length) return;
-  document.getElementById("random").innerText =
-    filtered[Math.floor(Math.random() * filtered.length)].n;
+  if (filtered.length)
+    document.getElementById("random").innerText =
+      filtered[Math.floor(Math.random() * filtered.length)].n;
 }
 
 // ---------------- TOGGLES ----------------
@@ -265,7 +229,6 @@ function toggleWhite() {
   updateExportButton();
   filter();
 }
-
 function toggleBlack() {
   if (!selectedName) return;
   black.has(selectedName) ? black.delete(selectedName) : black.add(selectedName);
