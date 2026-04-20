@@ -34,6 +34,7 @@ document.addEventListener("DOMContentLoaded", () => {
         .filter(r => r.length >= 2 && r[0] && r[1])
         .map(r => [r[0].trim().toUpperCase(), r[1].trim()]);
       filter();
+      updateExportButton();
     });
 });
 
@@ -41,16 +42,19 @@ document.addEventListener("DOMContentLoaded", () => {
 function loadState() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return;
+
   try {
     const data = JSON.parse(raw);
     white = new Set(data.white || []);
     black = new Set(data.black || []);
+
     if (data.filters) {
       for (let id in data.filters) {
         const el = document.getElementById(id);
         if (!el) continue;
-        if (el.type === "checkbox") el.checked = data.filters[id];
-        else el.value = data.filters[id];
+        el.type === "checkbox"
+          ? (el.checked = data.filters[id])
+          : (el.value = data.filters[id]);
       }
     }
   } catch {}
@@ -105,11 +109,14 @@ function filter() {
 
     // text filters
     if (val("start") && !t.startsWith(val("start").toLowerCase())) continue;
+    if (val("contains") && !t.includes(val("contains").toLowerCase())) continue;
+
     let ne = val("not_end").toLowerCase().split(",").map(s => s.trim()).filter(Boolean);
     if (ne.some(p => t.endsWith(p))) continue;
-    if (val("contains") && !t.includes(val("contains").toLowerCase())) continue;
+
     let nc = val("not_contains").toLowerCase().split(",").map(s => s.trim()).filter(Boolean);
     if (nc.some(p => t.includes(p))) continue;
+
     if (!checked("allow_double") && /(.)\1/.test(t)) continue;
 
     // length
@@ -143,18 +150,20 @@ function filter() {
 
 // ---------------- FULL NAME ----------------
 function buildFull(n, g) {
-  let m = val("sur_m");
-  let f = val("sur_f");
-  let gender = val("gender");
+  const m = val("sur_m");
+  const f = val("sur_f");
+  const gf = val("gender");
 
-  if (gender === "Chlapecká + N") return g === "ZENA" ? n : (m ? `${n} ${m}` : n);
-  if (gender === "Dívčí + N") return g === "MUZ" ? n : (f ? `${n} ${f}` : n);
-  if (gender === "Chlapecká") return m ? `${n} ${m}` : n;
-  if (gender === "Dívčí") return f ? `${n} ${f}` : n;
-  if (gender === "Neutrální") return (m || f) ? `${n} ${m} / ${n} ${f}` : n;
+  if (gf === "Chlapecká") return m ? `${n} ${m}` : n;
+  if (gf === "Dívčí") return f ? `${n} ${f}` : n;
+  if (gf === "Chlapecká + N") return g === "ZENA" ? n : (m ? `${n} ${m}` : n);
+  if (gf === "Dívčí + N") return g === "MUZ" ? n : (f ? `${n} ${f}` : n);
+  if (gf === "Neutrální")
+    return (m || f) ? `${n} ${m} / ${n} ${f}` : n;
 
   if (g === "MUZ") return m ? `${n} ${m}` : n;
   if (g === "ZENA") return f ? `${n} ${f}` : n;
+
   return (m || f) ? `${n} ${m} / ${n} ${f}` : n;
 }
 
@@ -182,8 +191,6 @@ function render() {
     };
     table.appendChild(tr);
   });
-
-  renderPagination();
 }
 
 // ---------------- EXPORT ----------------
@@ -194,26 +201,34 @@ function updateExportButton() {
 }
 
 function exportLists() {
+  if (!white.size && !black.size) return;
+
   const wb = XLSX.utils.book_new();
 
-  function sheetFromSet(set, label) {
+  function addSheet(set, name) {
     const rows = [["Pohlaví", "Jméno", "Celé jméno"]];
+
     [...set].forEach(n => {
       const item = names.find(x => x[1] === n);
       if (!item) return;
 
       const g = item[0];
-      const gender = g === "MUZ" ? "Chlapecké" : g === "ZENA" ? "Dívčí" : "Neutrální";
+      const gender =
+        g === "MUZ" ? "Chlapecké" :
+        g === "ZENA" ? "Dívčí" : "Neutrální";
 
       rows.push([gender, n, buildFull(n, g)]);
     });
 
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-    XLSX.utils.book_append_sheet(wb, ws, label);
+    XLSX.utils.book_append_sheet(
+      wb,
+      XLSX.utils.aoa_to_sheet(rows),
+      name
+    );
   }
 
-  if (white.size) sheetFromSet(white, "Oblíbené");
-  if (black.size) sheetFromSet(black, "Veto");
+  if (white.size) addSheet(white, "Oblíbené");
+  if (black.size) addSheet(black, "Veto");
 
   const d = new Date();
   const stamp =
@@ -247,6 +262,7 @@ function toggleWhite() {
   if (!selectedName) return;
   white.has(selectedName) ? white.delete(selectedName) : white.add(selectedName);
   black.delete(selectedName);
+  updateExportButton();
   filter();
 }
 
@@ -254,5 +270,6 @@ function toggleBlack() {
   if (!selectedName) return;
   black.has(selectedName) ? black.delete(selectedName) : black.add(selectedName);
   white.delete(selectedName);
+  updateExportButton();
   filter();
 }
